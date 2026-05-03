@@ -35,6 +35,11 @@ from plyer import notification
 from plyer import vibrator
 import time
 
+# 导入新增功能模块
+from pet_mood import PetMoodSystem
+from weather import WeatherAPI
+from calendar_integration import CalendarIntegration
+
 # 设置窗口透明背景
 Config.set('graphics', 'background_color', '0,0,0,0')
 
@@ -233,6 +238,19 @@ class CutePet(Widget):
         self.click_count = 0
         self.drag_offset_x = 0
         self.drag_offset_y = 0
+        
+        # 新增功能系统
+        self.mood_system = PetMoodSystem()
+        self.weather_api = WeatherAPI()
+        self.calendar = CalendarIntegration()
+        self.current_mood = 'normal'
+        self.current_weather = None
+        self.next_calendar_event = None
+        
+        # 定时更新心情、天气、日历
+        Clock.schedule_interval(self.update_mood_status, 30)  # 每30秒更新心情
+        Clock.schedule_interval(self.update_weather_status, 1800)  # 每30分钟更新天气
+        Clock.schedule_interval(self.update_calendar_status, 600)  # 每10分钟更新日历
         
         self.draw_cute_pet()
         Clock.schedule_once(lambda dt: self.start_cute_idle(), 0.5)
@@ -1667,6 +1685,14 @@ class DesktopPetAlarmApp(App):
         
         self.sleep_check_event = Clock.schedule_interval(self.check_pet_sleep_state, 60)
         
+        # 添加心情、天气、日历显示标签
+        self.add_mood_weather_calendar_labels()
+        
+        # 初始化定时更新
+        Clock.schedule_interval(self.update_mood_status, 30)  # 每30秒更新心情
+        Clock.schedule_interval(self.update_weather_status, 1800)  # 每30分钟更新天气
+        Clock.schedule_interval(self.update_calendar_status, 600)  # 每10分钟更新日历
+        
         return self.root
     
     def load_alarm_sound(self):
@@ -1785,6 +1811,85 @@ class DesktopPetAlarmApp(App):
         except Exception as e:
             print(f"显示通知失败: {e}")
     
+    def add_mood_weather_calendar_labels(self):
+        # 添加心情显示标签
+        self.mood_label = Label(
+            text="心情: 正常 😐",
+            size_hint=(None, None),
+            size=(120, 30),
+            pos_hint={'x': 0.85, 'y': 0.95},
+            color=self.pet.mood_system.get_mood_color('normal'),
+            font_size='12sp',
+            halign='left'
+        )
+        self.root.add_widget(self.mood_label)
+        
+        # 添加天气显示标签
+        self.weather_label = Label(
+            text="天气: 晴天 ☀️",
+            size_hint=(None, None),
+            size=(120, 30),
+            pos_hint={'x': 0.85, 'y': 0.92},
+            color=CUTE_COLORS['secondary'],
+            font_size='12sp',
+            halign='left'
+        )
+        self.root.add_widget(self.weather_label)
+        
+        # 添加日历显示标签
+        self.calendar_label = Label(
+            text="日历: 无事件",
+            size_hint=(None, None),
+            size=(120, 30),
+            pos_hint={'x': 0.85, 'y': 0.89},
+            color=CUTE_COLORS['text'],
+            font_size='12sp',
+            halign='left'
+        )
+        self.root.add_widget(self.calendar_label)
+
+    def update_mood_status(self, dt):
+        if self.pet:
+            current_time = datetime.now()
+            weather_data = self.pet.weather_api.get_current_weather()
+            weather_impact = weather_data.get('impact', 'normal') if weather_data else 'normal'
+            next_event = self.pet.calendar.get_next_event()
+            
+            new_mood = self.pet.mood_system.get_current_mood(current_time, weather_impact, next_event)
+            self.pet.current_mood = new_mood
+            
+            # 更新心情显示
+            if self.mood_label:
+                mood_emoji = self.pet.mood_system.generate_mood_emoji(new_mood)
+                self.mood_label.text = f"心情: {new_mood} {mood_emoji}"
+                self.mood_label.color = self.pet.mood_system.get_mood_color(new_mood)
+
+    def update_weather_status(self, dt):
+        if self.pet:
+            weather_data = self.pet.weather_api.get_current_weather()
+            self.pet.current_weather = weather_data
+            
+            # 更新天气显示
+            if self.weather_label:
+                weather_info = self.pet.weather_api.get_weather_for_pet()
+                self.weather_label.text = f"天气: {weather_info['description']} {weather_info['emoji']}"
+                self.weather_label.color = CUTE_COLORS['secondary']
+
+    def update_calendar_status(self, dt):
+        if self.pet:
+            next_event = self.pet.calendar.get_next_event()
+            self.pet.next_calendar_event = next_event
+            
+            # 更新日历显示
+            if self.calendar_label:
+                if next_event:
+                    event_emoji = self.pet.calendar.get_event_emoji(next_event['type'])
+                    self.calendar_label.text = f"日历: {next_event['title']} {event_emoji}"
+                    self.calendar_label.color = CUTE_COLORS['accent']
+                else:
+                    self.calendar_label.text = "日历: 无事件"
+                    self.calendar_label.color = CUTE_COLORS['text']
+
     def on_stop(self):
         if self.alarm_manager:
             self.alarm_manager.save_alarms()
@@ -1832,5 +1937,6 @@ class DesktopPetAlarmApp(App):
             print(f"恢复窗口位置失败: {e}")
 
 
-if __name__ == '__main__':
-    DesktopPetAlarmApp().run()
+# ==================== 新增功能方法 ====================
+
+
