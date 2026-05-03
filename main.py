@@ -534,6 +534,78 @@ class CutePet(Widget):
         for bubble in self.sleep_bubbles:
             bubble.cleanup()
 
+    def start_happy_animation(self):
+        self.cancel_current_animation()
+        base_y = self.y
+        
+        # 快乐的摇摆动画
+        sway_left = Animation(rotation=-8, duration=0.8, t='in_out_sine')
+        sway_right = Animation(rotation=8, duration=0.8, t='in_out_sine')
+        jump_up = Animation(y=base_y + dp(15), duration=0.3, t='out_quad')
+        jump_down = Animation(y=base_y, duration=0.3, t='bounce_out')
+        
+        anim = (sway_left & jump_up) + (sway_right & jump_down)
+        anim.repeat = True
+        self.current_animation = anim
+        anim.start(self)
+
+    def start_sleepy_animation(self):
+        self.cancel_current_animation()
+        self.is_sleeping = True
+        
+        # 困倦的缓慢移动
+        sway_left = Animation(rotation=-3, duration=2.5, t='in_out_sine')
+        sway_right = Animation(rotation=3, duration=2.5, t='in_out_sine')
+        float_up = Animation(y=base_y + dp(5), duration=3, t='in_out_sine')
+        float_down = Animation(y=base_y, duration=3, t='in_out_sine')
+        
+        anim = (sway_left & float_up) + (sway_right & float_down)
+        anim.repeat = True
+        self.current_animation = anim
+        anim.start(self)
+
+    def start_excited_animation(self):
+        self.cancel_current_animation()
+        self.is_excited = True
+        base_y = self.y
+        
+        # 兴奋的快速旋转和跳动
+        seq = None
+        for i in range(3):
+            left = Animation(rotation=-20, duration=0.05, t='out_quad')
+            right = Animation(rotation=20, duration=0.05, t='out_quad')
+            jump = Animation(y=base_y + dp(25), duration=0.05, t='out_quad')
+            fall = Animation(y=base_y, duration=0.05, t='in_quad')
+            
+            step = (left & jump) + (right & fall)
+            if seq is None:
+                seq = step
+            else:
+                seq += step
+        
+        seq += Animation(rotation=0, duration=0.1, t='out_quad')
+        
+        def on_complete(*args):
+            self.is_excited = False
+            self.start_cute_idle()
+        
+        seq.bind(on_complete=on_complete)
+        self.current_animation = seq
+        seq.start(self)
+
+    def start_angry_animation(self):
+        self.cancel_current_animation()
+        base_y = self.y
+        
+        # 生气的小幅度抖动
+        vibrate_left = Animation(rotation=-5, duration=0.1, t='out_quad')
+        vibrate_right = Animation(rotation=5, duration=0.1, t='out_quad')
+        
+        anim = vibrate_left + vibrate_right
+        anim.repeat = True
+        self.current_animation = anim
+        anim.start(self)
+
 
 # ==================== 按钮样式 ====================
 class CuteButton(Button):
@@ -1857,6 +1929,16 @@ class DesktopPetAlarmApp(App):
             
             new_mood = self.pet.mood_system.get_current_mood(current_time, weather_impact, next_event)
             self.pet.current_mood = new_mood
+            
+            # 根据心情改变动画
+            if new_mood == 'happy':
+                self.pet.start_happy_animation()
+            elif new_mood == 'sleepy':
+                self.pet.start_sleepy_animation()
+            elif new_mood == 'excited':
+                self.pet.start_excited_animation()
+            elif new_mood == 'angry':
+                self.pet.start_angry_animation()
             
             # 更新心情显示
             if self.mood_label:

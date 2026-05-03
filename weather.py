@@ -5,6 +5,7 @@
 
 import requests
 import json
+import datetime
 
 class WeatherAPI:
     """天气API类"""
@@ -24,6 +25,10 @@ class WeatherAPI:
             dict: 天气信息
         """
         try:
+            # 如果API密钥是demo_key，使用模拟数据
+            if self.api_key == 'demo_key':
+                return self._get_default_weather()
+                
             # 使用OpenWeatherMap API
             params = {
                 'q': city,
@@ -82,13 +87,54 @@ class WeatherAPI:
     
     def _get_default_weather(self):
         """获取默认天气数据"""
-        return {
-            'temp': 25,
-            'description': '晴天',
-            'humidity': 50,
-            'pressure': 1013,
-            'impact': 'sun2'
-        }
+        # 根据时间和季节返回不同的默认天气
+        now = datetime.datetime.now()
+        month = now.month
+        hour = now.hour
+        
+        # 模拟季节性天气
+        if month in [12, 1, 2]:  # 冬季
+            if hour >= 6 and hour <= 18:
+                return {
+                    'temp': 5,
+                    'description': '晴朗',
+                    'humidity': 30,
+                    'pressure': 1013,
+                    'impact': 'cold'
+                }
+            else:
+                return {
+                    'temp': -2,
+                    'description': '寒冷',
+                    'humidity': 40,
+                    'pressure': 1013,
+                    'impact': 'cold'
+                }
+        elif month in [6, 7, 8]:  # 夏季
+            if hour >= 6 and hour <= 18:
+                return {
+                    'temp': 32,
+                    'description': '炎热',
+                    'humidity': 60,
+                    'pressure': 1013,
+                    'impact': 'hot'
+                }
+            else:
+                return {
+                    'temp': 28,
+                    'description': '晴朗',
+                    'humidity': 50,
+                    'pressure': 1013,
+                    'impact': 'normal'
+                }
+        else:  # 春秋季
+            return {
+                'temp': 22,
+                'description': '晴朗',
+                'humidity': 50,
+                'pressure': 1013,
+                'impact': 'sunny'
+            }
     
     def get_weather_for_pet(self):
         """获取适合宠物显示的天气信息"""
@@ -96,7 +142,7 @@ class WeatherAPI:
         
         pet_weather_data = {
             'emoji': self._get_weather_emoji(weather['description']),
-            'temp': f"{weather['temp']}°C",
+            'temp': f"{int(weather['temp'])}°C",
             'description': weather['description'],
             'impact': weather['impact'],
             'suggestion': self._get_weather_suggestion(weather['impact'])
