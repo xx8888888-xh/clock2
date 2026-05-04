@@ -1737,33 +1737,82 @@ class DesktopPetAlarmApp(App):
     def build(self):
         # Android悬浮窗权限检查
         from kivy.utils import platform
+        from kivy.uix.widget import Widget
+        from kivy.clock import Clock
+        
+        print(f"当前平台: {platform}")
+        
         if platform == "android":
+            print("Android平台检测")
             try:
                 from android.permissions import Permission, request_permission
                 from android.permissions import check_permission
                 
                 # 检查悬浮窗权限
                 has_permission = check_permission(Permission.SYSTEM_ALERT_WINDOW)
-                if not has_permission:
+                print(f"悬浮窗权限状态: {has_permission}")
+                
+                if has_permission:
+                    print("已拥有悬浮窗权限，延迟初始化")
+                    # 延迟0.5秒初始化窗口
+                    Clock.schedule_once(lambda dt: self.init_app_window(), 0.5)
+                else:
+                    print("没有悬浮窗权限，请求权限")
                     def callback(permissions, results):
+                        print(f"权限请求结果: {results}")
                         if all(results):
-                            print("悬浮窗权限已授予")
+                            print("悬浮窗权限已授予，延迟初始化")
+                            # 延迟1秒初始化窗口
+                            Clock.schedule_once(lambda dt: self.init_app_window(), 1)
                         else:
-                            print("悬浮窗权限被拒绝，应用可能无法正常运行")
+                            print("悬浮窗权限被拒绝，延迟初始化")
+                            # 权限被拒绝也延迟初始化，可能显示错误
+                            Clock.schedule_once(lambda dt: self.init_app_window(), 1)
                     
                     # 请求悬浮窗权限
+                    print("正在请求悬浮窗权限...")
                     request_permission(Permission.SYSTEM_ALERT_WINDOW, callback)
-                else:
-                    print("已拥有悬浮窗权限")
-            except ImportError:
-                print("Android权限模块不可用，请在Android设备上运行")
+                    print("权限请求已发送")
+                
+                # 返回临时Widget避免闪退
+                return Widget()
+            except ImportError as e:
+                print(f"Android权限模块导入错误: {e}")
+                print("Android权限模块不可用，延迟初始化")
+                Clock.schedule_once(lambda dt: self.init_app_window(), 0.5)
+                return Widget()
+            except Exception as e:
+                print(f"Android权限检查异常: {e}")
+                Clock.schedule_once(lambda dt: self.init_app_window(), 0.5)
+                return Widget()
+        else:
+            print("非Android平台，直接初始化")
+            return self.init_app_window()
+    
+    def init_app_window(self):
+        """初始化应用窗口"""
+        from kivy.core.window import Window
+        from kivy.uix.floatlayout import FloatLayout
         
-        Window.borderless = True
-        Window.always_on_top = True
-        Window.resizable = False
-        Window.size = (dp(200), dp(200))
-        Window.left = 100
-        Window.top = 500
+        try:
+            Window.borderless = True
+            Window.always_on_top = True
+            Window.resizable = False
+            Window.size = (dp(200), dp(200))
+            Window.left = 100
+            Window.top = 500
+            
+            # Android特殊设置
+            from kivy.utils import platform
+            if platform == "android":
+                Window.clearcolor = (0, 0, 0, 0)  # Android透明背景
+                Window.show()
+                print("Android窗口初始化完成")
+            else:
+                print("桌面窗口初始化完成")
+        except Exception as e:
+            print(f"窗口初始化失败: {e}")
+            return Widget()
         
         self.root = FloatLayout()
         
@@ -1788,7 +1837,7 @@ class DesktopPetAlarmApp(App):
         Clock.schedule_interval(self.update_weather_status, 1800)  # 每30分钟更新天气
         Clock.schedule_interval(self.update_calendar_status, 600)  # 每10分钟更新日历
         
-        return self.root
+
     
     def load_alarm_sound(self):
         try:
@@ -2028,6 +2077,31 @@ class DesktopPetAlarmApp(App):
         gc.collect()
     
     def on_start(self):
+        """Android应用启动"""
+        try:
+            from kivy.utils import platform
+            if platform == "android":
+                print("Android应用启动")
+                
+                # 启动Android服务
+                try:
+                    from android import AndroidApplication
+                    AndroidApplication.start_service()
+                    print("Android前台服务已启动")
+                except ImportError:
+                    print("Android前台服务模块不可用")
+                except Exception as e:
+                    print(f"前台服务启动失败: {e}")
+                
+                # 检查窗口初始化状态
+                if self.root is None:
+                    print("窗口未初始化，重新初始化")
+                    from kivy.clock import Clock
+                    Clock.schedule_once(lambda dt: self.init_app_window(), 0.5)
+        except Exception as e:
+            print(f"Android启动异常: {e}")
+        
+        # 恢复窗口位置
         try:
             if os.path.exists('window_pos.json'):
                 with open('window_pos.json', 'r', encoding='utf-8') as f:
