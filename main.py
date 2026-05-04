@@ -1735,6 +1735,29 @@ class DesktopPetAlarmApp(App):
         self.banner_display_time = 5
     
     def build(self):
+        # Android悬浮窗权限检查
+        from kivy.utils import platform
+        if platform == "android":
+            try:
+                from android.permissions import Permission, request_permission
+                from android.permissions import check_permission
+                
+                # 检查悬浮窗权限
+                has_permission = check_permission(Permission.SYSTEM_ALERT_WINDOW)
+                if not has_permission:
+                    def callback(permissions, results):
+                        if all(results):
+                            print("悬浮窗权限已授予")
+                        else:
+                            print("悬浮窗权限被拒绝，应用可能无法正常运行")
+                    
+                    # 请求悬浮窗权限
+                    request_permission(Permission.SYSTEM_ALERT_WINDOW, callback)
+                else:
+                    print("已拥有悬浮窗权限")
+            except ImportError:
+                print("Android权限模块不可用，请在Android设备上运行")
+        
         Window.borderless = True
         Window.always_on_top = True
         Window.resizable = False
