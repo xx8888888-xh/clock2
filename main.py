@@ -1805,9 +1805,25 @@ class DesktopPetAlarmApp(App):
             # Android特殊设置
             from kivy.utils import platform
             if platform == "android":
-                Window.clearcolor = (0, 0, 0, 0)  # Android透明背景
+                # 关键修复：Android悬浮窗透明度
+                Window.clearcolor = (0, 0, 0, 0.01)  # 几乎透明，但可见
                 Window.show()
                 print("Android窗口初始化完成")
+                
+                # 额外设置确保窗口可见
+                Window.top = 300  # 调整为中间位置
+                Window.left = 50   # 调整为中间位置
+                Window.size = (dp(200), dp(200))
+                Window.always_on_top = True
+                Window.borderless = True
+                Window.resizable = False
+                
+                # 调试信息
+                print(f"窗口位置: ({Window.left}, {Window.top})")
+                print(f"窗口尺寸: {Window.size}")
+                print(f"窗口透明度: {Window.clearcolor}")
+                print(f"窗口总在最前: {Window.always_on_top}")
+                print(f"窗口无边框: {Window.borderless}")
             else:
                 print("桌面窗口初始化完成")
         except Exception as e:
