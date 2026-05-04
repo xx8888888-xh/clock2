@@ -1806,7 +1806,8 @@ class DesktopPetAlarmApp(App):
             from kivy.utils import platform
             if platform == "android":
                 # 关键修复：Android悬浮窗透明度
-                Window.clearcolor = (0, 0, 0, 0.01)  # 几乎透明，但可见
+                # Alpha=0.5 → 50%透明，可见但不太突兀
+                Window.clearcolor = (0.95, 0.95, 0.95, 0.5)  # 浅灰色50%透明
                 Window.show()
                 print("Android窗口初始化完成")
                 
@@ -1824,6 +1825,13 @@ class DesktopPetAlarmApp(App):
                 print(f"窗口透明度: {Window.clearcolor}")
                 print(f"窗口总在最前: {Window.always_on_top}")
                 print(f"窗口无边框: {Window.borderless}")
+                
+                # 如果窗口看不见，可以尝试其他透明度
+                print("如果窗口看不见，请在代码中调整透明度:")
+                print("1. Window.clearcolor = (1, 1, 1, 1)  # 白色完全不透明")
+                print("2. Window.clearcolor = (0.5, 0.5, 0.5, 0.8)  # 灰色80%透明")
+                print("3. Window.clearcolor = (1, 0, 0, 0.8)  # 红色80%透明")
+                print("4. Window.clearcolor = (0, 0, 0, 0.8)  # 黑色80%透明")
             else:
                 print("桌面窗口初始化完成")
         except Exception as e:
