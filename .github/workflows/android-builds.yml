@@ -1,0 +1,175 @@
+name: Android悬浮窗架构测试
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      architecture:
+        description: '架构版本 (simple|stable|full)'
+        required: true
+        default: 'stable'
+
+jobs:
+  build-android-simple:
+    name: 构建最简单架构
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: 安装Buildozer
+      run: |
+        pip install buildozer
+    
+    - name: 配置最简单的架构
+      run: |
+        # 复制最简单架构的main.py
+        cp simplest_main.py main.py
+        
+        # 复制buildozer配置
+        cp buildozer_android.spec buildozer.spec
+    
+    - name: 构建APK
+      run: |
+        buildozer android debug
+    
+    - name: 上传APK（最简单架构）
+      uses: actions/upload-artifact@v3
+      with:
+        name: clock2-simple-apk
+        path: bin/*.apk
+      
+    - name: 输出构建日志
+      if: always()
+      run: |
+        if [ -f .buildozer/android/platform/build.log ]; then
+          cat .buildozer/android/platform/build.log | tail -100
+        fi
+
+  build-android-stable:
+    name: 构建稳定架构
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: 安装Buildozer
+      run: |
+        pip install buildozer
+    
+    - name: 配置稳定架构
+      run: |
+        # 复制稳定架构的main.py
+        cp android_stable_main.py main.py
+        
+        # 复制buildozer配置
+        cp buildozer_android.spec buildozer.spec
+    
+    - name: 构建APK
+      run: |
+        buildozer android debug
+    
+    - name: 上传APK（稳定架构）
+      uses: actions/upload-artifact@v3
+      with:
+        name: clock2-stable-apk
+        path: bin/*.apk
+      
+    - name: 输出构建日志
+      if: always()
+      run: |
+        if [ -f .buildozer/android/platform/build.log ]; then
+          cat .buildozer/android/platform/build.log | tail -100
+        fi
+
+  build-android-full:
+    name: 构建完整架构
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: 安装Buildozer
+      run: |
+        pip install buildozer
+    
+    - name: 配置完整架构
+      run: |
+        # 使用原来的main.py（功能完整）
+        # 保持原样
+        
+        # 复制buildozer配置
+        cp buildozer_android.spec buildozer.spec
+    
+    - name: 构建APK
+      run: |
+        buildozer android debug
+    
+    - name: 上传APK（完整架构）
+      uses: actions/upload-artifact@v3
+      with:
+        name: clock2-full-apk
+        path: bin/*.apk
+      
+    - name: 输出构建日志
+      if: always()
+      run: |
+        if [ -f .buildozer/android/platform/build.log ]; then
+          cat .buildozer/android/platform/build.log | tail -100
+        fi
+
+  create-release:
+    name: 创建多个架构版本
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 下载所有APK
+      uses: actions/download-artifact@v3
+      with:
+        pattern: clock2-*-apk
+        path: artifacts
+    
+    - name: 创建版本说明
+      run: |
+        echo "# 宠物闹钟 - 多架构测试版本" > release_notes.md
+        echo "" >> release_notes.md
+        echo "## 架构说明" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "1. **简单架构** (clock2-simple.apk):" >> release_notes.md
+        echo "   - 最简单的窗口创建" >> release_notes.md
+        echo "   - 透明度固定为0.01" >> release_notes.md
+        echo "   - 延迟初始化" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "2. **稳定架构** (clock2-stable.apk):" >> release_notes.md
+        echo "   - Android Service支持" >> release_notes.md
+        echo "   - 渐进式初始化" >> release_notes.md
+        echo "   - 窗口验证" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "3. **完整架构** (clock2-full.apk):" >> release_notes.md
+        echo "   - 原功能完整版本" >> release_notes.md
+        echo "   - 闹钟功能" >> release_notes.md
+        echo "   - 宠物动画" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "## 测试建议" >> release_notes.md
+        echo "" >> release_notes.md
+        echo "1. 先测试简单架构" >> release_notes.md
+        echo "2. 如果窗口可见，再测试稳定架构" >> release_notes.md
+        echo "3. 最后测试完整架构" >> release_notes.md

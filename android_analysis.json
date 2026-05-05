@@ -1,0 +1,95 @@
+{
+  "android_detected": false,
+  "problems": [
+    {
+      "title": "\u900f\u660e\u5ea6\u95ee\u9898",
+      "description": "Window.clearcolor = (0, 0, 0, 0) \u662f\u5b8c\u5168\u900f\u660e\uff0c\u53ef\u80fd\u5bfc\u81f4\u7a97\u53e3\u770b\u4e0d\u89c1",
+      "solution": "\u6539\u4e3a Window.clearcolor = (0, 0, 0, 0.01) \u51e0\u4e4e\u900f\u660e"
+    },
+    {
+      "title": "Android\u6743\u9650\u65f6\u5e8f",
+      "description": "Android\u9700\u8981\u5148\u83b7\u53d6SYSTEM_ALERT_WINDOW\u6743\u9650\uff0c\u7136\u540e\u624d\u80fd\u521b\u5efa\u7a97\u53e3",
+      "solution": "\u5ef6\u8fdf\u7a97\u53e3\u521d\u59cb\u5316\uff0c\u5148\u8bf7\u6c42\u6743\u9650"
+    },
+    {
+      "title": "Service\u67b6\u6784\u7f3a\u5931",
+      "description": "Android\u60ac\u6d6e\u7a97\u901a\u5e38\u9700\u8981\u524d\u53f0\u670d\u52a1\uff0c\u5426\u5219\u53ef\u80fd\u88ab\u7cfb\u7edf\u6740\u6b7b",
+      "solution": "\u6dfb\u52a0Android\u524d\u53f0\u670d\u52a1\u652f\u6301"
+    },
+    {
+      "title": "\u7a97\u53e3\u4f4d\u7f6e\u8ba1\u7b97\u9519\u8bef",
+      "description": "Window.top/left\u53ef\u80fd\u8bbe\u7f6e\u4e3a\u65e0\u6548\u503c\uff0c\u5bfc\u81f4\u95ea\u9000",
+      "solution": "\u4f7f\u7528\u56fa\u5b9a\u503c\uff1aWindow.top = 100, Window.left = 50"
+    },
+    {
+      "title": "Kivy\u751f\u547d\u5468\u671f",
+      "description": "Kivy\u7684build\u65b9\u6cd5\u4e2d\u521d\u59cb\u5316\u7a97\u53e3\u53ef\u80fd\u8fc7\u65e9",
+      "solution": "\u5728on_start\u65b9\u6cd5\u4e2d\u521d\u59cb\u5316\u7a97\u53e3\uff0c\u6216\u8005\u5ef6\u8fdf\u521d\u59cb\u5316"
+    },
+    {
+      "title": "Android\u914d\u7f6e\u9519\u8bef",
+      "description": "buildozer.spec\u4e2d\u7684android\u914d\u7f6e\u53ef\u80fd\u6709\u95ee\u9898",
+      "solution": "\u68c0\u67e5android.permissions\u548candroid.service\u914d\u7f6e"
+    }
+  ],
+  "solutions": [
+    {
+      "name": "Service+WindowManager\u67b6\u6784",
+      "description": "\u4f7f\u7528Android\u524d\u53f0\u670d\u52a1+WindowManager\u521b\u5efa\u60ac\u6d6e\u7a97",
+      "pros": [
+        "\u539f\u751fAndroid\u652f\u6301",
+        "\u7a33\u5b9a",
+        "\u4e0d\u88ab\u7cfb\u7edf\u6740\u6b7b"
+      ],
+      "cons": [
+        "\u4ee3\u7801\u590d\u6742\u5ea6\u9ad8",
+        "\u9700\u8981\u591a\u4e2aAndroid API"
+      ]
+    },
+    {
+      "name": "Python SimpleWindow\u67b6\u6784",
+      "description": "\u6700\u7b80\u5316\u7684Kivy\u7a97\u53e3\uff0c\u653e\u5f03\u590d\u6742\u529f\u80fd",
+      "pros": [
+        "\u4ee3\u7801\u7b80\u5355",
+        "\u6613\u4e8e\u8c03\u8bd5",
+        "\u517c\u5bb9\u6027\u597d"
+      ],
+      "cons": [
+        "\u529f\u80fd\u6709\u9650",
+        "\u53ef\u80fd\u4e0d\u7a33\u5b9a"
+      ]
+    },
+    {
+      "name": "WebView Hybrid\u67b6\u6784",
+      "description": "\u4f7f\u7528Android WebView + JavaScript\u5b9e\u73b0\u60ac\u6d6e\u7a97",
+      "pros": [
+        "\u975e\u5e38\u7a33\u5b9a",
+        "\u539f\u751fAndroid\u652f\u6301",
+        "\u6027\u80fd\u597d"
+      ],
+      "cons": [
+        "\u9700\u8981Android\u5f00\u53d1",
+        "\u4e0d\u662fPython"
+      ]
+    },
+    {
+      "name": "Native Android App",
+      "description": "\u5b8c\u5168Android\u539f\u751f\u5e94\u7528",
+      "pros": [
+        "\u6700\u7a33\u5b9a",
+        "\u6027\u80fd\u6700\u4f73",
+        "\u7528\u6237\u4f53\u9a8c\u597d"
+      ],
+      "cons": [
+        "\u9700\u8981Java\u5f00\u53d1",
+        "\u4e0d\u662fPython/Kivy"
+      ]
+    }
+  ],
+  "issues": [
+    "\u4ee3\u7801\u4e2d\u6ca1\u6709Android\u6743\u9650\u5904\u7406\u903b\u8f91",
+    "\u6ca1\u6709Android Service\u67b6\u6784",
+    "\u6ca1\u6709Android WindowManager\u652f\u6301"
+  ],
+  "recommendation": "SimpleWindow\u67b6\u6784\u4f18\u5148\uff0cService\u67b6\u6784\u5907\u9009"
+}
