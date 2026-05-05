@@ -48,7 +48,7 @@ jobs:
     - name: 生成构建报告
       run: |
         echo "最简单架构构建完成"
-        echo "架构: simplest_main.py"
+        echo "架构: simplest_main2.py"
         echo "透明度: Window.clearcolor = (0, 0, 0, 0.01)"
         echo "窗口大小: Window.size = (300, 300)"
         echo "窗口位置: Window.top = 150, Window.left = 100"
@@ -71,7 +71,7 @@ jobs:
         
     - name: 显示配置
       run: |
-        echo "main.py:"
+        echo "main2.py:"
         head -20 main.py
         
     - name: 构建APK
@@ -93,8 +93,8 @@ jobs:
         echo "渐进式初始化"
         echo "窗口验证机制"
 
-  build-full:
-    name: 构建完整架构
+  build-fixed:
+    name: 构建修复架构
     runs-on: ubuntu-latest
     
     steps:
@@ -102,17 +102,20 @@ jobs:
     
     - name: 设置环境
       run: |
-        echo "构建完整架构版本"
+        echo "构建修复架构版本"
         
-    - name: 配置完整架构
+    - name: 配置修复架构
       run: |
-        # 使用原来的main.py
-        cp buildozer_android.spec buildozer.spec
+        # 使用修复后的main.py（透明度0.5）
+        cp buildozer.spec buildozer.spec
         
     - name: 显示配置
       run: |
         echo "main.py:"
-        head -20 main.py
+        grep -n "Config.set\|Window.clearcolor\|Clock.schedule_once" main.py
+        echo "透明度: Config.set('graphics', 'background_color', '0,0,0,0.5')"
+        echo "窗口透明度: Window.clearcolor = (0, 0, 0, 0.01)"
+        echo "延迟初始化: Clock.schedule_once(lambda dt: self.safe_init_window(), 1)"
         
     - name: 构建APK
       run: |
@@ -122,20 +125,23 @@ jobs:
     - name: 上传APK
       uses: actions/upload-artifact@v3
       with:
-        name: full-architecture-apk
+        name: fixed-architecture-apk
         path: bin/*.apk
     
     - name: 生成构建报告
       run: |
-        echo "完整架构构建完成"
+        echo "修复架构构建完成"
         echo "架构: main.py"
-        echo "原功能完整版本"
-        echo "透明度修复: Window.clearcolor = (0, 0, 0, 0.01)"
+        echo "透明度修复: Config.set('graphics', 'background_color', '0,0,0,0.5')"
+        echo "窗口透明度: Window.clearcolor = (0, 0, 0, 0.01)"
+        echo "延迟初始化: Clock.schedule_once(lambda dt: self.safe_init_window(), 1)"
+        echo "Android Service: AndroidWindowService类"
+        echo "Android权限: SYSTEM_ALERT_WINDOW权限"
 
   summary:
     name: 构建总结
     runs-on: ubuntu-latest
-    needs: [build-simple, build-stable, build-full]
+    needs: [build-simple, build-stable, build-fixed]
     
     steps:
     - name: 下载APKs
@@ -160,17 +166,19 @@ jobs:
         echo "   - 渐进式初始化"
         echo "   - 窗口验证机制"
         echo ""
-        echo "3. **完整架构**: main.py"
-        echo "   - 原功能完整版本"
-        echo "   - 透明度修复"
-        echo "   - 延迟初始化"
+        echo "3. **修复架构**: main.py"
+        echo "   - 透明度修复: Config.set('graphics', 'background_color', '0,0,0,0.5')"
+        echo "   - 窗口透明度: Window.clearcolor = (0, 0, 0, 0.01)"
+        echo "   - 延迟初始化: Clock.schedule_once(lambda dt: self.safe_init_window(), 1)"
+        echo "   - Android Service: AndroidWindowService类"
+        echo "   - Android权限: SYSTEM_ALERT_WINDOW权限"
         echo ""
         echo "## 测试建议"
         echo ""
         echo "### 测试顺序"
         echo "1. 先测试**最简单架构** → 验证窗口是否可见"
         echo "2. 再测试**稳定架构** → 验证Android Service是否有效"
-        echo "3. 最后测试**完整架构** → 验证完整功能是否正常"
+        echo "3. 最后测试**修复架构** → 验证透明度修复和Android Service"
         echo ""
         echo "### Android权限设置"
         echo "1. 悬浮窗权限 → 允许"
