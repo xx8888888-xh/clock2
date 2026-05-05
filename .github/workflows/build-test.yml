@@ -1,0 +1,185 @@
+name: Build Android APKs
+
+on:
+  push:
+    branches: [ architecture-rework ]
+  pull_request:
+    branches: [ architecture-rework ]
+  workflow_dispatch:
+    inputs:
+      architecture:
+        description: '架构版本'
+        required: false
+        default: 'simple'
+
+jobs:
+  build-simple:
+    name: 构建最简单架构
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: 设置环境
+      run: |
+        echo "构建最简单架构版本"
+        
+    - name: 配置最简单架构
+      run: |
+        cp simplest_main.py main.py
+        cp buildozer_android.spec buildozer.spec
+        
+    - name: 显示配置
+      run: |
+        echo "main.py:"
+        head -20 main.py
+        
+    - name: 构建APK
+      run: |
+        pip install buildozer
+        buildozer android debug
+        
+    - name: 上传APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: simple-architecture-apk
+        path: bin/*.apk
+    
+    - name: 生成构建报告
+      run: |
+        echo "最简单架构构建完成"
+        echo "架构: simplest_main.py"
+        echo "透明度: Window.clearcolor = (0, 0, 0, 0.01)"
+        echo "窗口大小: Window.size = (300, 300)"
+        echo "窗口位置: Window.top = 150, Window.left = 100"
+
+  build-stable:
+    name: 构建稳定架构
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: 设置环境
+      run: |
+        echo "构建稳定架构版本"
+        
+    - name: 配置稳定架构
+      run: |
+        cp android_stable_main.py main.py
+        cp buildozer_android.spec buildozer.spec
+        
+    - name: 显示配置
+      run: |
+        echo "main.py:"
+        head -20 main.py
+        
+    - name: 构建APK
+      run: |
+        pip install buildozer
+        buildozer android debug
+        
+    - name: 上传APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: stable-architecture-apk
+        path: bin/*.apk
+    
+    - name: 生成构建报告
+      run: |
+        echo "稳定架构构建完成"
+        echo "架构: android_stable_main.py"
+        echo "Android Service支持"
+        echo "渐进式初始化"
+        echo "窗口验证机制"
+
+  build-full:
+    name: 构建完整架构
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: 设置环境
+      run: |
+        echo "构建完整架构版本"
+        
+    - name: 配置完整架构
+      run: |
+        # 使用原来的main.py
+        cp buildozer_android.spec buildozer.spec
+        
+    - name: 显示配置
+      run: |
+        echo "main.py:"
+        head -20 main.py
+        
+    - name: 构建APK
+      run: |
+        pip install buildozer
+        buildozer android debug
+        
+    - name: 上传APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: full-architecture-apk
+        path: bin/*.apk
+    
+    - name: 生成构建报告
+      run: |
+        echo "完整架构构建完成"
+        echo "架构: main.py"
+        echo "原功能完整版本"
+        echo "透明度修复: Window.clearcolor = (0, 0, 0, 0.01)"
+
+  summary:
+    name: 构建总结
+    runs-on: ubuntu-latest
+    needs: [build-simple, build-stable, build-full]
+    
+    steps:
+    - name: 下载APKs
+      uses: actions/download-artifact@v3
+      with:
+        pattern: '*apk'
+        path: artifacts
+        
+    - name: 生成总结报告
+      run: |
+        echo "# 宠物闹钟 - Android架构测试APK构建完成"
+        echo ""
+        echo "## 构建的APK版本"
+        echo ""
+        echo "1. **最简单架构**: simplest_main.py"
+        echo "   - Window.clearcolor = (0, 0, 0, 0.01)"
+        echo "   - Window.size = (300, 300)"
+        echo "   - Window.top = 150, Window.left = 100"
+        echo ""
+        echo "2. **稳定架构**: android_stable_main.py"
+        echo "   - Android Service支持"
+        echo "   - 渐进式初始化"
+        echo "   - 窗口验证机制"
+        echo ""
+        echo "3. **完整架构**: main.py"
+        echo "   - 原功能完整版本"
+        echo "   - 透明度修复"
+        echo "   - 延迟初始化"
+        echo ""
+        echo "## 测试建议"
+        echo ""
+        echo "### 测试顺序"
+        echo "1. 先测试**最简单架构** → 验证窗口是否可见"
+        echo "2. 再测试**稳定架构** → 验证Android Service是否有效"
+        echo "3. 最后测试**完整架构** → 验证完整功能是否正常"
+        echo ""
+        echo "### Android权限设置"
+        echo "1. 悬浮窗权限 → 允许"
+        echo "2. 后台运行 → 关闭电池优化"
+        echo "3. 前台服务 → 允许"
+        echo ""
+        echo "### 调试日志"
+        echo "```bash"
+        echo "adb logcat | grep '宠物闹钟'"
+        echo "adb logcat | grep 'Window'"
+        echo "adb logcat | grep 'Android'"
+        echo "```"

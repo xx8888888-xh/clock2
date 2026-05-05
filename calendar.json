@@ -1,0 +1,23 @@
+[
+    {
+        "title": "生日",
+        "date": "2024-05-01",
+        "time": "12:00",
+        "type": "birthday",
+        "description": "朋友生日派对"
+    },
+    {
+        "title": "工作会议",
+        "date": "2024-05-02",
+        "time": "09:00",
+        "type": "meeting",
+        "description": "每周团队会议"
+    },
+    {
+        "title": "健身房",
+        "date": "2024-05-03",
+        "time": "19:00",
+        "type": "exercise",
+        "description": "健身锻炼"
+    }
+]

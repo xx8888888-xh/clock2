@@ -1,0 +1,26 @@
+[
+    {
+        "time": "08:00",
+        "repeat": "daily",
+        "name": "起床闹钟",
+        "snooze": true,
+        "snooze_time": 10,
+        "created": "2024-01-01T08:00:00"
+    },
+    {
+        "time": "12:00",
+        "repeat": "daily",
+        "name": "午餐提醒",
+        "snooze": false,
+        "snooze_time": 5,
+        "created": "2024-01-01T12:00:00"
+    },
+    {
+        "time": "18:00",
+        "repeat": "weekdays",
+        "name": "下班提醒",
+        "snooze": true,
+        "snooze_time": 15,
+        "created": "2024-01-01T18:00:00"
+    }
+]

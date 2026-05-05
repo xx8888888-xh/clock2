@@ -87,8 +87,6 @@
     }
   ],
   "issues": [
-    "\u4ee3\u7801\u4e2d\u6ca1\u6709Android\u6743\u9650\u5904\u7406\u903b\u8f91",
-    "\u6ca1\u6709Android Service\u67b6\u6784",
     "\u6ca1\u6709Android WindowManager\u652f\u6301"
   ],
   "recommendation": "SimpleWindow\u67b6\u6784\u4f18\u5148\uff0cService\u67b6\u6784\u5907\u9009"
