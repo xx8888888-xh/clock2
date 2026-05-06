@@ -37,8 +37,7 @@ jobs:
           
       - name: Build Android APK
         run: |
-          cp simple_main.py main.py
-          cp buildozer_simple.yml buildozer.spec
+          cp buildozer.yml buildozer.spec
           buildozer android debug
           
       - name: Upload APK artifact
