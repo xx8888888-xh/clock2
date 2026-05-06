@@ -8,8 +8,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  overlay_support: ^1.2.1
-  provider: ^6.1.0
 
 dev_dependencies:
   flutter_test:
