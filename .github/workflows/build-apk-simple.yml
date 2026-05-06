@@ -1,0 +1,30 @@
+name: Build Android APK with Docker
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    container:
+      image: buildozer/buildozer:latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Build APK with Docker
+        run: |
+          cp buildozer.yml buildozer.spec
+          buildozer android debug
+        
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: clock2-apk
+          path: ./bin/*.apk
+          retention-days: 7
