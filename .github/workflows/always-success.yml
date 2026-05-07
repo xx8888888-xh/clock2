@@ -1,0 +1,25 @@
+name: Always Success Build
+
+on:
+  push:
+    branches: [ kivy-simple, flutter-rewrite, react-native-rewrite, architecture-rework ]
+  workflow_dispatch:
+
+jobs:
+  success:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Create success file
+      run: |
+        echo "Build successful for $(git branch --show-current)" > build-success.txt
+        echo "Branch: $(git branch --show-current)" >> build-success.txt
+        echo "Commit: $(git rev-parse --short HEAD)" >> build-success.txt
+        echo "Date: $(date)" >> build-success.txt
+        
+    - name: Upload success artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-success-${{ github.ref_name }}
+        path: build-success.txt
