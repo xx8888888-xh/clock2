@@ -1,0 +1,96 @@
+name: Build Kivy APK (Simple Docker)
+
+on:
+  push:
+    branches: [ kivy-simple ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Setup Docker Buildozer
+      run: |
+        docker pull kivy/buildozer:latest
+      
+    - name: Create minimal Kivy app
+      run: |
+        # Create a minimal Kivy app
+        cat > main.py << 'EOF'
+import kivy
+kivy.require('2.0.0')
+
+from kivy.app import App
+from kivy.uix.label import Label
+from kivy.core.window import Window
+import time
+
+class Clock2App(App):
+    def build(self):
+        # Set window properties for Android floating window
+        Window.clearcolor = (0, 0, 0, 0.5)  # Semi-transparent
+        Window.size = (300, 200)
+        Window.top = 300
+        Window.left = 50
+        Window.borderless = True
+        Window.always_on_top = True
+        
+        # Create a simple label
+        label = Label(text='Clock2 Kivy Version', font_size=24)
+        return label
+
+if __name__ == '__main__':
+    Clock2App().run()
+EOF
+        
+        # Create requirements.txt
+        echo "kivy==2.0.0" > requirements.txt
+        
+        # Create buildozer.spec
+        cat > buildozer.spec << 'EOF'
+[app]
+title = Clock2 Kivy
+package.name = clock2.kivy
+package.domain = org.clock2
+source.dir = .
+source.include_exts = py,png,jpg,kv,atlas
+version = 1.0
+requirements = python3,kivy==2.0.0
+orientation = portrait
+fullscreen = 0
+
+[buildozer]
+log_level = 2
+warn_on_root = 1
+
+# Android specific
+android.p4a_dir = .p4a
+android.arch = arm64-v8a
+android.permissions = INTERNET,WAKE_LOCK,SYSTEM_ALERT_WINDOW
+android.allow_backup = True
+android.wakelock = True
+android.runnable = True
+android.entrypoint = org.clock2.clock2.kivy
+
+# Graphics settings
+android.graphics_debug = False
+android.launch_mode = standard
+android.window_soft_input_mode = adjustResize
+EOF
+
+    - name: Build APK with Docker Buildozer
+      run: |
+        docker run -it --rm \
+          -v $(pwd):/home/kivy/app \
+          -w /home/kivy/app \
+          kivy/buildozer:latest \
+          buildozer android debug
+        
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: clock2-kivy-apk
+        path: bin/*.apk
