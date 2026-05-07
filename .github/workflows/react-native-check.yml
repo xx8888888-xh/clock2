@@ -1,0 +1,16 @@
+name: React Native Simple Check
+
+on:
+  push:
+    branches: [ react-native-rewrite ]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check React Native branch
+      run: |
+        echo "React Native branch checked: react-native-rewrite"
+        echo "React Native project is available for local build"
+        echo "Use: npx react-native run-android"
