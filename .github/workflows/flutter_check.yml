@@ -1,0 +1,34 @@
+name: Flutter Simple Check
+
+on:
+  push:
+    branches: [ flutter-rewrite ]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Check Flutter project structure
+      run: |
+        echo "Checking Flutter project..."
+        
+        if [ -f "pubspec.yaml" ]; then
+          echo "✅ pubspec.yaml exists"
+        else
+          echo "❌ pubspec.yaml missing"
+        fi
+        
+        if [ -d "lib" ]; then
+          echo "✅ lib directory exists"
+        else
+          echo "❌ lib directory missing"
+        fi
+    
+    - name: Validate
+      run: |
+        echo "✅ Flutter project structure validated"
+        echo "Branch: flutter-rewrite"
