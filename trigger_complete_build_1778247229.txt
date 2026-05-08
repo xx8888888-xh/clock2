@@ -1,0 +1,4 @@
+触发完整功能APK构建 - Fri May  8 09:33:49 PM CST 2026
+分支: flutter-rewrite
+工作流: flutter_complete_build.yml
+目的: 强制触发完整功能APK构建
