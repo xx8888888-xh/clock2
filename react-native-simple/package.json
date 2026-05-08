@@ -1,15 +1,23 @@
 {
   "name": "Clock2ReactNative",
   "version": "1.0.0",
-  "description": "React Native version of Clock2",
+  "description": "React Native version of Clock2 - Floating Pet Clock",
   "main": "index.js",
   "scripts": {
     "start": "react-native start",
     "android": "react-native run-android",
-    "ios": "react-native run-ios"
+    "ios": "react-native run-ios",
+    "build:android": "cd android && ./gradlew assembleRelease"
   },
   "dependencies": {
     "react": "18.2.0",
-    "react-native": "0.72.0"
+    "react-native": "0.72.0",
+    "react-native-gesture-handler": "^2.12.0",
+    "react-native-reanimated": "^3.3.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.20.0",
+    "@babel/preset-env": "^7.20.0",
+    "@babel/runtime": "^7.20.0"
   }
 }
