@@ -1,0 +1,17 @@
+name: API Created Success
+
+on:
+  push:
+    branches: [ kivy-imple ]
+  workflow_dispatch:
+
+jobs:
+  success:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout-v4
+    - name: Api Success
+      run: |
+        echo "✒ API Created Workflow Success"
+        echo "✒ Created via GitHub API"
+        echo "✒ API Success Proof" > api_success.txt
