@@ -979,6 +979,7 @@ class HomePageState extends State<HomePage>
   }
 
   Widget _buildAlarmCard(AlarmItem alarm) {
+    final index = alarms.indexOf(alarm);
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
