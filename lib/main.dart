@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 import 'package:overlay_support/overlay_support.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+  ]);
   runApp(const MyApp());
 }
 
@@ -14,27 +20,27 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return OverlaySupport(
       child: MaterialApp(
-        title: '宠物闹钟 - Flutter完整版',
+        title: '宠物闹钟',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
-          primarySwatch: Colors.blue,
+          primarySwatch: Colors.indigo,
           useMaterial3: true,
+          scaffoldBackgroundColor: const Color(0xFFF0F4FF),
         ),
-        home: const FloatingPetClock(),
+        home: const PetClockHome(),
       ),
     );
   }
 }
 
-class FloatingPetClock extends StatefulWidget {
-  const FloatingPetClock({super.key});
+class PetClockHome extends StatefulWidget {
+  const PetClockHome({super.key});
 
   @override
-  State<FloatingPetClock> createState() => _FloatingPetClockState();
+  State<PetClockHome> createState() => _PetClockHomeState();
 }
 
-class _FloatingPetClockState extends State<FloatingPetClock> {
-  Offset _position = const Offset(100, 200);
+class _PetClockHomeState extends State<PetClockHome> {
   String _currentTime = '';
   String _currentDate = '';
   bool _isPetSleeping = false;
@@ -48,13 +54,13 @@ class _FloatingPetClockState extends State<FloatingPetClock> {
     _lastDay = DateTime.now().day;
     _updateTime();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => _updateTime());
-
-    // 初始化示例闹钟
     _alarms = [
       Alarm(time: '08:00', enabled: true, label: '起床'),
       Alarm(time: '12:30', enabled: true, label: '午餐'),
       Alarm(time: '23:00', enabled: false, label: '睡觉'),
     ];
+    // 延迟申请权限，等 UI 渲染完
+    Future.delayed(const Duration(milliseconds: 500), _requestPermissions);
   }
 
   @override
@@ -63,11 +69,34 @@ class _FloatingPetClockState extends State<FloatingPetClock> {
     super.dispose();
   }
 
+  /// 申请运行时权限
+  void _requestPermissions() async {
+    // 申请通知权限（Android 13+）
+    final notificationStatus = await Permission.notification.request();
+    // 申请闹钟权限（Android 12+）
+    final alarmStatus = await Permission.scheduleExactAlarm.request();
+
+    if (mounted) {
+      if (notificationStatus.isGranted) {
+        showSimpleNotification(
+          const Text('🔔 宠物闹钟已启动，通知权限已开启'),
+          background: Colors.green,
+          duration: const Duration(seconds: 3),
+        );
+      } else {
+        showSimpleNotification(
+          const Text('⚠️ 请在设置中开启通知权限，否则闹钟无法提醒'),
+          background: Colors.orange,
+          duration: const Duration(seconds: 5),
+        );
+      }
+    }
+  }
+
   void _updateTime() {
     final now = DateTime.now();
     final currentDay = now.day;
 
-    // 跨天重置所有闹钟的 triggeredToday 状态
     if (currentDay != _lastDay) {
       _lastDay = currentDay;
       for (final alarm in _alarms) {
@@ -77,13 +106,9 @@ class _FloatingPetClockState extends State<FloatingPetClock> {
 
     setState(() {
       _currentTime = DateFormat('HH:mm:ss').format(now);
-      _currentDate = DateFormat('yyyy-MM-dd EEEE', 'zh_CN').format(now);
-
-      // 检查宠物睡眠时间（22:00-07:00）
+      _currentDate = DateFormat('yyyy年MM月dd日 EEEE', 'zh_CN').format(now);
       final hour = now.hour;
       _isPetSleeping = hour >= 22 || hour < 7;
-
-      // 检查闹钟
       _checkAlarms(now);
     });
   }
@@ -101,10 +126,12 @@ class _FloatingPetClockState extends State<FloatingPetClock> {
   }
 
   void _triggerAlarm(Alarm alarm) {
+    // 触发振动
+    HapticFeedback.heavyImpact();
     showSimpleNotification(
       Text('⏰ ${alarm.label}时间到！'),
-      background: Colors.blue,
-      duration: const Duration(seconds: 5),
+      background: Colors.deepOrange,
+      duration: const Duration(seconds: 10),
     );
   }
 
@@ -144,7 +171,7 @@ class _FloatingPetClockState extends State<FloatingPetClock> {
             onPressed: () => Navigator.pop(context),
             child: const Text('取消'),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () {
               final time = timeController.text.trim();
               final label = labelController.text.trim();
@@ -177,141 +204,220 @@ class _FloatingPetClockState extends State<FloatingPetClock> {
     );
   }
 
-  void _showSettings() {
+  void _toggleAlarm(int index) {
+    setState(() {
+      _alarms[index].enabled = !_alarms[index].enabled;
+    });
+    final alarm = _alarms[index];
     showSimpleNotification(
-      const Text('⚙️ 设置功能开发中...'),
-      background: Colors.orange,
+      Text(alarm.enabled ? '✅ ${alarm.label} 已开启' : '🔕 ${alarm.label} 已关闭'),
+      background: alarm.enabled ? Colors.green : Colors.grey,
       duration: const Duration(seconds: 2),
     );
   }
 
-  void _showWeather() {
+  void _deleteAlarm(int index) {
+    final alarm = _alarms[index];
+    setState(() {
+      _alarms.removeAt(index);
+    });
     showSimpleNotification(
-      const Text('☀️ 天气功能开发中...'),
-      background: Colors.orange,
+      Text('🗑️ 已删除 ${alarm.label}'),
+      background: Colors.red,
       duration: const Duration(seconds: 2),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A2E),
-      body: Stack(
-        children: [
-          // 背景装饰
-          Positioned.fill(
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF1A1A2E),
-                    Color(0xFF16213E),
-                    Color(0xFF0F3460),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          // 悬浮窗宠物闹钟
-          Positioned(
-            left: _position.dx,
-            top: _position.dy,
-            child: GestureDetector(
-              onPanUpdate: (details) {
-                setState(() {
-                  // 添加屏幕边界限制
-                  double newX = _position.dx + details.delta.dx;
-                  double newY = _position.dy + details.delta.dy;
-                  newX = newX.clamp(0.0, screenSize.width - 220);
-                  newY = newY.clamp(0.0, screenSize.height - 260);
-                  _position = Offset(newX, newY);
-                });
-              },
+      body: SafeArea(
+        child: Column(
+          children: [
+            // 顶部：宠物 + 时间
+            Expanded(
+              flex: 3,
               child: Container(
-                width: 220,
-                height: 260,
+                width: double.infinity,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF8FB1FF).withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(25),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.indigo.shade400,
+                      Colors.indigo.shade700,
+                    ],
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(32),
+                    bottomRight: Radius.circular(32),
+                  ),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // 宠物表情（根据时间变化）
-                    Text(
-                      _isPetSleeping ? '😴' : '🐾',
-                      style: const TextStyle(fontSize: 60),
+                    // 宠物表情
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 500),
+                      child: Text(
+                        _isPetSleeping ? '😴' : '🐱',
+                        key: ValueKey(_isPetSleeping),
+                        style: const TextStyle(fontSize: 80),
+                      ),
                     ),
-
-                    const SizedBox(height: 10),
-
-                    // 时间显示
+                    const SizedBox(height: 8),
+                    Text(
+                      _isPetSleeping ? '嘘...我在睡觉' : '你好！我是你的宠物闹钟',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        color: Colors.white70,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // 时间
                     Text(
                       _currentTime,
                       style: const TextStyle(
-                        fontSize: 28,
+                        fontSize: 48,
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
+                        letterSpacing: 2,
                       ),
                     ),
-
-                    // 日期显示
+                    const SizedBox(height: 4),
+                    // 日期
                     Text(
                       _currentDate,
                       style: const TextStyle(
                         fontSize: 14,
-                        color: Colors.white70,
+                        color: Colors.white60,
                       ),
-                    ),
-
-                    const SizedBox(height: 15),
-
-                    // 功能按钮
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _buildFunctionButton('⏰', '闹钟', _addAlarm),
-                        _buildFunctionButton('⚙️', '设置', _showSettings),
-                        _buildFunctionButton('☀️', '天气', _showWeather),
-                      ],
                     ),
                   ],
                 ),
               ),
             ),
-          ),
-        ],
+
+            // 底部：闹钟列表
+            Expanded(
+              flex: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 标题栏
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          '我的闹钟',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.indigo,
+                          ),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: _addAlarm,
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('添加'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.indigo,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // 闹钟列表
+                    Expanded(
+                      child: _alarms.isEmpty
+                          ? const Center(
+                              child: Text(
+                                '暂无闹钟，点击上方添加',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: _alarms.length,
+                              itemBuilder: (context, index) {
+                                final alarm = _alarms[index];
+                                return _buildAlarmCard(alarm, index);
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildFunctionButton(
-      String emoji, String label, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.2),
-          borderRadius: BorderRadius.circular(15),
-        ),
-        child: Column(
+  Widget _buildAlarmCard(Alarm alarm, int index) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 20)),
-            Text(label,
-                style: const TextStyle(fontSize: 12, color: Colors.white)),
+            // 时间
+            Text(
+              alarm.time,
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: alarm.enabled ? Colors.indigo : Colors.grey,
+              ),
+            ),
+            const SizedBox(width: 12),
+            // 标签
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    alarm.label,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: alarm.enabled ? Colors.black87 : Colors.grey,
+                    ),
+                  ),
+                  Text(
+                    alarm.enabled ? '已开启' : '已关闭',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: alarm.enabled ? Colors.green : Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // 开关
+            Switch(
+              value: alarm.enabled,
+              onChanged: (_) => _toggleAlarm(index),
+              activeColor: Colors.indigo,
+            ),
+            // 删除
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              onPressed: () => _deleteAlarm(index),
+            ),
           ],
         ),
       ),
@@ -333,5 +439,6 @@ class Alarm {
   });
 
   @override
-  String toString() => 'Alarm(time: $time, label: $label, enabled: $enabled)';
+  String toString() =>
+      'Alarm(time: $time, label: $label, enabled: $enabled)';
 }
