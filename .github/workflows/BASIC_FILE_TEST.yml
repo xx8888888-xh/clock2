@@ -1,0 +1,32 @@
+name: BASIC FILE TEST
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - kivy-simple
+
+jobs:
+  basic-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Simple echo
+        run: echo "开始基础文件测试..."
+        
+      - name: Create directory
+        run: mkdir -p test_output
+        
+      - name: Create text file
+        run: |
+          echo "Test file created at: $(date)" > test_output/test.txt
+          echo "For memory rule compliance testing" >> test_output/test.txt
+          
+      - name: List files
+        run: ls -la test_output/
+        
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: basic-test-output
+          path: test_output/
