@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
@@ -66,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _checkOverlayStatus() async {
     final isActive = await FlutterOverlayWindow.isActive();
     setState(() {
-      _isOverlayActive = isActive ?? false;
+      _isOverlayActive = isActive;
     });
   }
 
