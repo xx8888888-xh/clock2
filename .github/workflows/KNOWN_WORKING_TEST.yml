@@ -1,0 +1,39 @@
+name: KNOWN WORKING TEST
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - kivy-simple
+
+jobs:
+  known-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Step 1 - Simple echo (已知可用)
+        run: echo "Step 1: Simple echo command - KNOWN WORKING"
+        
+      - name: Step 2 - Multiple echos
+        run: |
+          echo "Step 2: Multiple echo commands"
+          echo "Testing command chaining"
+          echo "Memory rule compliance test"
+          
+      - name: Step 3 - Create small text file
+        run: |
+          echo "Step 3: Creating small text file"
+          # 使用最安全的方法创建文件
+          cat > small_file.txt << 'EOF'
+          Small text file created at: $(date)
+          For testing file creation in GitHub Actions
+          Memory rule compliance test
+          This is a small file (<1KB)
+          EOF
+          echo "File created, size:" && wc -c small_file.txt
+          
+      - name: Step 4 - Upload small file
+        uses: actions/upload-artifact@v3
+        with:
+          name: known-working-test
+          path: small_file.txt
