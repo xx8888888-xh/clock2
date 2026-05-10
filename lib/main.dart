@@ -74,7 +74,7 @@ class _PetClockHomeState extends State<PetClockHome> {
     // 申请通知权限（Android 13+）
     final notificationStatus = await Permission.notification.request();
     // 申请闹钟权限（Android 12+）
-    final alarmStatus = await Permission.scheduleExactAlarm.request();
+    await Permission.scheduleExactAlarm.request();
 
     if (mounted) {
       if (notificationStatus.isGranted) {
