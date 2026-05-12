@@ -1830,6 +1830,10 @@ class BatchAddDialog(CutePopup):
 class TimerDialog(CutePopup):
     def __init__(self, timer_manager, **kwargs):
         super().__init__(**kwargs)
+        # 修复ERR-120: 参数验证
+        if timer_manager is None or not hasattr(timer_manager, 'add_timer'):
+            raise ValueError("TimerDialog: 无效的计时器管理器")
+        
         self.timer_manager = timer_manager
         self.title = '⏱️ 倒计时'
         self.size_hint = (0.85, 0.7)
@@ -1838,38 +1842,47 @@ class TimerDialog(CutePopup):
         
         time_layout = BoxLayout(orientation='horizontal', size_hint_y=0.15, spacing=dp(10))
         time_layout.add_widget(Label(text='⏱️ 分钟:', size_hint_x=0.3, font_size=sp(16), color=CUTE_COLORS['text']))
+        # 修复ERR-121: 改进默认值和验证
         self.minute_input = TextInput(
             text='5',
             multiline=False,
             input_filter='int',
             size_hint_x=0.7,
             font_size=sp(16),
-            background_color=CUTE_COLORS['background']
+            background_color=CUTE_COLORS['background'],
+            hint_text='输入分钟数 (1-1440)',
+            write_tab=False
         )
         time_layout.add_widget(self.minute_input)
         layout.add_widget(time_layout)
         
         sec_layout = BoxLayout(orientation='horizontal', size_hint_y=0.15, spacing=dp(10))
         sec_layout.add_widget(Label(text='⏱️ 秒:', size_hint_x=0.3, font_size=sp(16), color=CUTE_COLORS['text']))
+        # 修复ERR-122: 改进默认值和验证
         self.sec_input = TextInput(
             text='0',
             multiline=False,
             input_filter='int',
             size_hint_x=0.7,
             font_size=sp(16),
-            background_color=CUTE_COLORS['background']
+            background_color=CUTE_COLORS['background'],
+            hint_text='输入秒数 (0-59)',
+            write_tab=False
         )
         sec_layout.add_widget(self.sec_input)
         layout.add_widget(sec_layout)
         
         label_layout = BoxLayout(orientation='horizontal', size_hint_y=0.15, spacing=dp(10))
         label_layout.add_widget(Label(text='🏷️ 标签:', size_hint_x=0.3, font_size=sp(16), color=CUTE_COLORS['text']))
+        # 修复ERR-123: 改进默认标签
         self.label_input = TextInput(
-            text='计时器',
+            text='计时任务',
             multiline=False,
             size_hint_x=0.7,
             font_size=sp(16),
-            background_color=CUTE_COLORS['background']
+            background_color=CUTE_COLORS['background'],
+            hint_text='输入计时器标签（可选）',
+            write_tab=False
         )
         label_layout.add_widget(self.label_input)
         layout.add_widget(label_layout)
