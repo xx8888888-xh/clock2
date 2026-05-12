@@ -573,7 +573,8 @@ class CutePet(Widget):
             else:
                 debug(f"update_pet: 缺少图形对象，宠物: {hasattr(self, 'pet_body')}, 阴影: {hasattr(self, 'shadow')}, 高光: {hasattr(self, 'highlight')}")
         except Exception as e:
-        
+            debug(f"update_pet异常: {e}")
+            
         # 继续更新其他图形元素
         try:
             highlight_size = (self.pet_size * 0.4, self.pet_size * 0.25)
