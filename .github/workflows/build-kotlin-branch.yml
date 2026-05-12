@@ -23,32 +23,14 @@ jobs:
           pip3 install kivy==2.3.0
           pip3 install kivy-garden
           
-      - name: Create buildozer.spec
+      - name: Use existing buildozer.spec
         run: |
-          # 创建针对修复代码的构建配置
-          cat > buildozer.spec << EOF
-[app]
-title = Clock2 Fixed
-package.name = clock2fixed
-package.domain = org.clock2
-source.dir = fixed_code
-source.include_exts = py,png,jpg,kv,atlas,json
-source.main = main.py
-version = 1.0.0
-requirements = python3,kivy==2.3.0,pillow,requests
-orientation = portrait
-android.permissions = INTERNET,VIBRATE
-android.api = 33
-android.minapi = 21
-android.target_api = 33
-android.sdk = 34
-android.ndk = 25b
-android.ndk_api = 21
-android.archs = arm64-v8a
-
-[buildozer]
-log_level = 2
-EOF
+          # 使用fixed_code目录中现有的buildozer.spec文件
+          cp fixed_code/buildozer.spec .
+          echo "使用现有buildozer.spec配置"
+          echo "应用名称: 宠物闹钟"
+          echo "包名: petalarm"
+          echo "版本: 3.0.0"
           
       - name: Build APK
         run: |
