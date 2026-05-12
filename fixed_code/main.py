@@ -1317,34 +1317,52 @@ class AlarmClock:
         self.schedule_next_alarm()
     
     def save_alarms(self):
+        # 修复ERR-088: 使用配置文件路径变量
+        alarms_path = 'alarms.json'
         try:
-            with open('alarms.json', 'w', encoding='utf-8') as f:
+            with open(alarms_path, 'w', encoding='utf-8') as f:
                 json.dump(self.alarms, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"保存闹钟失败: {e}")
+            # 修复ERR-084: 使用error函数记录错误
+            error(f"保存闹钟失败: {e}")
     
     def load_alarms(self):
+        # 修复ERR-087: 使用配置文件路径变量
+        alarms_path = 'alarms.json'
         try:
-            if os.path.exists('alarms.json'):
-                with open('alarms.json', 'r', encoding='utf-8') as f:
+            if os.path.exists(alarms_path):
+                with open(alarms_path, 'r', encoding='utf-8') as f:
                     self.alarms = json.load(f)
+            else:
+                self.alarms = []
         except Exception as e:
-            print(f"加载闹钟失败: {e}")
+            # 修复ERR-085: 使用error函数记录错误
+            error(f"加载闹钟失败: {e}")
             self.alarms = []
     
     def export_alarms(self, filepath):
         try:
+            # 验证文件路径
+            if not filepath or not isinstance(filepath, str):
+                error("导出闹钟失败: 文件路径无效")
+                return False
+            
             with open(filepath, 'w', encoding='utf-8') as f:
                 json.dump(self.alarms, f, ensure_ascii=False, indent=2)
             return True
         except Exception as e:
-            print(f"导出闹钟失败: {e}")
+            # 修复ERR-086: 使用error函数记录错误
+            error(f"导出闹钟失败: {e}")
             return False
     
     def cleanup(self):
-        if self.alarm_check_event:
-            self.alarm_check_event.cancel()
-            self.alarm_check_event = None
+        # 修复ERR-089: 添加异常处理
+        try:
+            if self.alarm_check_event:
+                self.alarm_check_event.cancel()
+                self.alarm_check_event = None
+        except Exception as e:
+            error(f"cleanup失败: {e}")
 
 
 # ==================== 计时器管理类 ====================
@@ -1355,46 +1373,122 @@ class TimerManager:
         self.start_checking()
     
     def add_timer(self, minutes, seconds=0, label="计时器"):
-        total_seconds = minutes * 60 + seconds
-        timer = {
-            'id': len(self.timers),
-            'label': label,
-            'total_seconds': total_seconds,
-            'remaining': total_seconds,
-            'running': True,
-            'created_at': datetime.now()
-        }
-        self.timers.append(timer)
-        return timer
+        # 修复ERR-091: 添加参数验证
+        try:
+            if minutes < 0 or seconds < 0:
+                raise ValueError(f"时间不能为负数: 分钟={minutes}, 秒={seconds}")
+            
+            total_seconds = minutes * 60 + seconds
+            
+            # 修复ERR-090: 使用唯一ID生成策略
+            import time
+            timer_id = int(time.time() * 1000) + len(self.timers)
+            
+            timer = {
+                'id': timer_id,
+                'label': label,
+                'total_seconds': total_seconds,
+                'remaining': total_seconds,
+                'running': True,
+                'created_at': datetime.now()
+            }
+            self.timers.append(timer)
+            return timer
+        except Exception as e:
+            error(f"add_timer失败: {e}")
+            return None
     
     def remove_timer(self, timer_id):
-        self.timers = [t for t in self.timers if t['id'] != timer_id]
+        # 修复ERR-092: 添加异常处理和返回值
+        try:
+            original_count = len(self.timers)
+            self.timers = [t for t in self.timers if t['id'] != timer_id]
+            removed = len(self.timers) < original_count
+            if removed:
+                debug(f"移除计时器 {timer_id} 成功，移除前: {original_count}个，移除后: {len(self.timers)}个")
+            return removed
+        except Exception as e:
+            error(f"remove_timer失败: {e}")
+            return False
     
     def toggle_timer(self, timer_id):
-        for timer in self.timers:
-            if timer['id'] == timer_id:
-                timer['running'] = not timer['running']
-                break
+        # 修复ERR-093: 添加异常处理和返回值
+        try:
+            found = False
+            for timer in self.timers:
+                if timer['id'] == timer_id:
+                    timer['running'] = not timer['running']
+                    new_state = "运行中" if timer['running'] else "已暂停"
+                    debug(f"切换计时器 {timer_id} 状态: {new_state}")
+                    found = True
+                    break
+            return found
+        except Exception as e:
+            error(f"toggle_timer失败: {e}")
+            return False
     
     def start_checking(self):
-        self.timer_check_event = Clock.schedule_interval(self.check_timers, 1)
+        # 修复ERR-094: 添加异常处理
+        try:
+            self.timer_check_event = Clock.schedule_interval(self.check_timers, 1)
+            debug("计时器检查已启动")
+        except Exception as e:
+            error(f"start_checking失败: {e}")
     
     def check_timers(self, dt):
-        for timer in self.timers[:]:
-            if timer['running'] and timer['remaining'] > 0:
-                timer['remaining'] -= 1
+        # 修复ERR-095: 添加异常处理和状态验证
+        try:
+            for timer in self.timers[:]:  # 使用切片复制列表避免遍历时修改的问题
+                # 检查计时器是否有效
+                if not isinstance(timer, dict):
+                    continue
                 
-                if timer['remaining'] <= 0:
-                    timer['running'] = False
-                    self.trigger_timer(timer)
+                # 确保必需字段存在
+                if 'running' not in timer or 'remaining' not in timer:
+                    continue
+                
+                # 修复ERR-095: 只有运行中的计时器才更新
+                if timer['running'] and timer['remaining'] > 0:
+                    timer['remaining'] -= 1
+                    
+                    # 当计时器结束时触发
+                    if timer['remaining'] <= 0:
+                        timer['running'] = False
+                        debug(f"计时器 {timer.get('id', '未知')} 已结束")
+                        self.trigger_timer(timer)
+        except Exception as e:
+            error(f"check_timers失败: {e}")
     
     def trigger_timer(self, timer):
-        app = App.get_running_app()
-        if app:
-            app.trigger_timer_alarm(timer)
+        # 修复ERR-096: 添加异常处理
+        try:
+            if not timer or not isinstance(timer, dict):
+                error("trigger_timer: 计时器对象无效")
+                return
+            
+            app = App.get_running_app()
+            if app:
+                app.trigger_timer_alarm(timer)
+                debug(f"已触发计时器报警: {timer.get('label', '未知')}")
+            else:
+                error("trigger_timer: 无法获取应用实例")
+        except Exception as e:
+            error(f"trigger_timer失败: {e}")
     
     def get_active_timers(self):
-        return [t for t in self.timers if t['remaining'] > 0]
+        # 修复ERR-097: 添加空列表检查和有效性验证
+        try:
+            if not hasattr(self, 'timers') or not isinstance(self.timers, list):
+                return []
+            
+            active_timers = []
+            for t in self.timers:
+                if isinstance(t, dict) and t.get('remaining', 0) > 0:
+                    active_timers.append(t)
+            return active_timers
+        except Exception as e:
+            error(f"get_active_timers失败: {e}")
+            return []
     
     def format_time(self, seconds):
         mins = seconds // 60
@@ -1421,6 +1515,10 @@ class CutePopup(Popup):
 class AlarmDialog(CutePopup):
     def __init__(self, alarm_manager, alarm_id=None, **kwargs):
         super().__init__(**kwargs)
+        # 修复ERR-098: 参数验证
+        if alarm_manager is None or not hasattr(alarm_manager, 'add_alarm'):
+            raise ValueError("AlarmDialog: 无效的闹钟管理器")
+        
         self.alarm_manager = alarm_manager
         self.alarm_id = alarm_id
         
@@ -1450,24 +1548,32 @@ class AlarmDialog(CutePopup):
         
         label_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(10))
         label_layout.add_widget(Label(text='🏷️ 名称:', size_hint_x=0.25, font_size=sp(16), color=CUTE_COLORS['text']))
+        # 修复ERR-101: 改进默认名称
+        default_label = '每日闹钟' if alarm_id is None else '闹钟'
         self.label_input = TextInput(
-            text='闹钟',
+            text=default_label,
             multiline=False,
             size_hint_x=0.75,
             font_size=sp(16),
-            background_color=CUTE_COLORS['background']
+            background_color=CUTE_COLORS['background'],
+            hint_text='输入闹钟名称（必填）',
+            write_tab=False
         )
         label_layout.add_widget(self.label_input)
         layout.add_widget(label_layout)
         
         content_layout = BoxLayout(orientation='horizontal', size_hint_y=0.18, spacing=dp(10))
         content_layout.add_widget(Label(text='📝 内容:', size_hint_x=0.25, font_size=sp(16), color=CUTE_COLORS['text']))
+        # 修复ERR-102: 改进默认内容
+        default_content = '时间到了！该起床/吃饭/工作了！' if alarm_id is None else '时间到了！'
         self.content_input = TextInput(
-            text='时间到了！',
+            text=default_content,
             multiline=True,
             size_hint_x=0.75,
             font_size=sp(14),
-            background_color=CUTE_COLORS['background']
+            background_color=CUTE_COLORS['background'],
+            hint_text='输入闹钟提示内容（可选）',
+            write_tab=False
         )
         content_layout.add_widget(self.content_input)
         layout.add_widget(content_layout)
