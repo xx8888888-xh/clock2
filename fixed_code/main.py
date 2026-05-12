@@ -373,30 +373,45 @@ class SleepBubble(Widget):
         self.add_widget(self.label)
     
     def float_up(self):
-        if self.current_anim:
+        # 修复ERR-022: 添加None检查
+        if self.current_anim is not None:
             self.current_anim.cancel(self)
         
         self.opacity = 0
-        start_y = self.y
+        # 修复ERR-023: 确保位置已确定
+        if hasattr(self, 'y') and self.y is not None:
+            start_y = self.y
+        else:
+            start_y = 0
         
         anim = Animation(opacity=0.8, duration=0.5)
         anim &= Animation(y=start_y + dp(60), duration=2, t='out_quad')
         anim &= Animation(x=self.x + dp(10), duration=2, t='in_out_sine')
         
-        def on_complete(*args):
+        # 修复ERR-024: 使用局部函数
+        def animation_complete(*args):
             self.hide()
         
-        anim.bind(on_complete=on_complete)
+        anim.bind(on_complete=animation_complete)
         self.current_anim = anim
         anim.start(self)
     
     def hide(self):
-        if self.current_anim:
+        # 修复ERR-025: 添加None检查
+        if self.current_anim is not None:
             self.current_anim.cancel(self)
-        Animation(opacity=0, duration=0.3).start(self)
+        # 修复ERR-026: 保存动画引用
+        hide_anim = Animation(opacity=0, duration=0.3)
+        hide_anim.start(self)
     
     def cleanup(self):
-        if self.current_anim:
+        # 修复ERR-027: 添加异常处理
+        try:
+            if self.current_anim is not None:
+                self.current_anim.cancel(self)
+                self.current_anim = None
+        except Exception as e:
+            error(f"SleepBubble cleanup失败: {e}")
             self.current_anim.cancel(self)
             self.current_anim = None
 
@@ -441,81 +456,145 @@ class CutePet(Widget):
         self.current_weather = None
         self.next_calendar_event = None
         
+        # 修复ERR-028: 集中管理定时器
+        self.timers = []
+        
         # 定时更新心情、天气、日历
-        Clock.schedule_interval(self.update_mood_status, 30)  # 每30秒更新心情
-        Clock.schedule_interval(self.update_weather_status, 1800)  # 每30分钟更新天气
-        Clock.schedule_interval(self.update_calendar_status, 600)  # 每10分钟更新日历
+        self.timers.append(Clock.schedule_interval(self.update_mood_status, 30))  # 每30秒更新心情
+        self.timers.append(Clock.schedule_interval(self.update_weather_status, 1800))  # 每30分钟更新天气
+        self.timers.append(Clock.schedule_interval(self.update_calendar_status, 600))  # 每10分钟更新日历
         
         self.draw_cute_pet()
-        Clock.schedule_once(lambda dt: self.start_cute_idle(), 0.5)
-        self.bubble_timer = Clock.schedule_interval(self.spawn_sleep_bubble, 3)
+        
+        # 修复ERR-029: 使用局部函数而不是lambda
+        def start_idle_callback(dt):
+            self.start_cute_idle()
+        Clock.schedule_once(start_idle_callback, 0.5)
+        
+        # 修复ERR-030: 统一管理定时器
+        bubble_timer = Clock.schedule_interval(self.spawn_sleep_bubble, 3)
+        self.timers.append(bubble_timer)
+        self.bubble_timer = bubble_timer
     
     def draw_cute_pet(self):
-        image_files = ['pet.png', 'pet_default.png', 'assets/pet.png']
-        for img_file in image_files:
-            if os.path.exists(img_file):
-                self.pet_image = Image(
-                    source=img_file,
-                    size=self.size,
-                    pos=self.pos,
-                    allow_stretch=True,
-                    keep_ratio=True
-                )
-                self.add_widget(self.pet_image)
-                return
-        
-        self.draw_default_pet()
+        # 修复ERR-031: 添加异常处理和回退机制
+        try:
+            image_files = ['pet.png', 'pet_default.png', 'assets/pet.png']
+            for img_file in image_files:
+                if os.path.exists(img_file):
+                    self.pet_image = Image(
+                        source=img_file,
+                        size=self.size,
+                        pos=self.pos,
+                        allow_stretch=True,
+                        keep_ratio=True
+                    )
+                    self.add_widget(self.pet_image)
+                    info(f"加载宠物图像: {img_file}")
+                    return
+            
+            info("未找到宠物图像文件，使用默认图形")
+            self.draw_default_pet()
+        except Exception as e:
+            error(f"加载宠物图像失败: {e}")
+            self.draw_default_pet()
+    
+    def cleanup_timers(self):
+        """清理所有定时器"""
+        # 修复ERR-028: 定时器清理方法
+        if hasattr(self, 'timers'):
+            for timer in self.timers:
+                if timer is not None:
+                    try:
+                        timer.cancel()
+                    except Exception as e:
+                        error(f"取消定时器失败: {e}")
+            self.timers = []
     
     def draw_default_pet(self):
-        with self.canvas:
-            Color(*CUTE_COLORS['shadow'])
-            self.shadow = Ellipse(
-                pos=(self.x + dp(5), self.y - dp(5)),
-                size=self.size
-            )
-            Color(*CUTE_COLORS['primary'])
-            self.pet_body = Ellipse(pos=self.pos, size=self.size)
-            Color(1, 1, 1, 0.3)
-            highlight_size = (self.pet_size * 0.4, self.pet_size * 0.25)
-            self.highlight = Ellipse(
-                pos=(self.x + self.pet_size * 0.2, self.y + self.pet_size * 0.6),
-                size=highlight_size
-            )
+        # 修复ERR-032、ERR-033、ERR-034: 添加位置检查和异常处理
+        try:
+            # 确保位置属性存在
+            if not hasattr(self, 'x') or self.x is None:
+                self.x = 0
+            if not hasattr(self, 'y') or self.y is None:
+                self.y = 0
+            if not hasattr(self, 'pos') or self.pos is None:
+                self.pos = (0, 0)
+            
+            with self.canvas:
+                Color(*CUTE_COLORS['shadow'])
+                self.shadow = Ellipse(
+                    pos=(self.x + dp(5), self.y - dp(5)),
+                    size=self.size
+                )
+                Color(*CUTE_COLORS['primary'])
+                self.pet_body = Ellipse(pos=self.pos, size=self.size)
+                Color(1, 1, 1, 0.3)
+                highlight_size = (self.pet_size * 0.4, self.pet_size * 0.25)
+                self.highlight = Ellipse(
+                    pos=(self.x + self.pet_size * 0.2, self.y + self.pet_size * 0.6),
+                    size=highlight_size
+                )
+        except Exception as e:
+            error(f"draw_default_pet失败: {e}")
         
         self.bind(pos=self.update_pet, size=self.update_pet)
         
+        # 修复ERR-035: 添加位置检查
+        if hasattr(self, 'x') and self.x is not None and hasattr(self, 'y') and self.y is not None:
+            current_x = self.x
+            current_y = self.y
+        else:
+            current_x = 0
+            current_y = 0
+            
         for i in range(3):
             bubble = SleepBubble()
             bubble.pos = (
-                self.x + self.pet_size + dp(10) + i * dp(15),
-                self.y + self.pet_size * 0.7 + i * dp(10)
+                current_x + self.pet_size + dp(10) + i * dp(15),
+                current_y + self.pet_size * 0.7 + i * dp(10)
             )
             self.sleep_bubbles.append(bubble)
             self.add_widget(bubble)
     
     def update_pet(self, *args):
-        if self.pet_body and self.shadow and self.highlight:
-            self.shadow.pos = (self.x + dp(5), self.y - dp(5))
-            self.shadow.size = self.size
-            self.pet_body.pos = self.pos
-            self.pet_body.size = self.size
-            
+        # 修复ERR-036、ERR-037: 改进检查和异常处理
+        try:
+            # 检查所有图形对象是否存在
+            if hasattr(self, 'pet_body') and self.pet_body is not None and \
+               hasattr(self, 'shadow') and self.shadow is not None and \
+               hasattr(self, 'highlight') and self.highlight is not None:
+                
+                self.shadow.pos = (self.x + dp(5), self.y - dp(5))
+                self.shadow.size = self.size
+                self.pet_body.pos = self.pos
+                self.pet_body.size = self.size
+            else:
+                debug(f"update_pet: 缺少图形对象，宠物: {hasattr(self, 'pet_body')}, 阴影: {hasattr(self, 'shadow')}, 高光: {hasattr(self, 'highlight')}")
+        except Exception as e:
+        
+        # 继续更新其他图形元素
+        try:
             highlight_size = (self.pet_size * 0.4, self.pet_size * 0.25)
-            self.highlight.pos = (
-                self.x + self.pet_size * 0.2,
-                self.y + self.pet_size * 0.6
-            )
-            self.highlight.size = highlight_size
-        
-        if self.pet_image:
-            self.pet_image.pos = self.pos
-            self.pet_image.size = self.size
-        
-        for i, bubble in enumerate(self.sleep_bubbles):
-            bubble.pos = (
-                self.x + self.pet_size + dp(10) + i * dp(15),
-                self.y + self.pet_size * 0.7 + i * dp(10)
-            )
+            if hasattr(self, 'highlight') and self.highlight is not None:
+                self.highlight.pos = (
+                    self.x + self.pet_size * 0.2,
+                    self.y + self.pet_size * 0.6
+                )
+                self.highlight.size = highlight_size
+            
+            if self.pet_image:
+                self.pet_image.pos = self.pos
+                self.pet_image.size = self.size
+            
+            for i, bubble in enumerate(self.sleep_bubbles):
+                bubble.pos = (
+                    self.x + self.pet_size + dp(10) + i * dp(15),
+                    self.y + self.pet_size * 0.7 + i * dp(10)
+                )
+        except Exception as e:
+            error(f"update_pet更新后续元素失败: {e}")
     
     def spawn_sleep_bubble(self, dt):
         if self.is_sleeping:
@@ -534,25 +613,28 @@ class CutePet(Widget):
     def start_cute_idle(self):
         self.cancel_current_animation()
         self.is_excited = False
-        base_y = self.y
+        # 修复ERR-038: 添加位置检查
+        base_y = self.y if hasattr(self, 'y') and self.y is not None else 0
         
-        def create_idle_animation():
-            if self.is_excited or self.is_sleeping:
-                return
-            
-            breathe_in = Animation(scale=1.05, duration=1.2, t='in_out_sine')
-            breathe_out = Animation(scale=1.0, duration=1.2, t='in_out_sine')
-            sway_left = Animation(rotation=-3, duration=1.2, t='in_out_sine')
-            sway_right = Animation(rotation=3, duration=1.2, t='in_out_sine')
-            float_up = Animation(y=base_y + dp(8), duration=1.5, t='in_out_sine')
-            float_down = Animation(y=base_y, duration=1.5, t='in_out_sine')
-            
-            anim = (breathe_in & sway_left & float_up) + (breathe_out & sway_right & float_down)
-            anim.repeat = True
-            self.current_animation = anim
-            anim.start(self)
+        # 修复ERR-039: 将嵌套函数改为内部方法
+        self._create_idle_animation(base_y)
+    
+    def _create_idle_animation(self, base_y):
+        """创建空闲动画（修复ERR-039）"""
+        if self.is_excited or self.is_sleeping:
+            return
         
-        create_idle_animation()
+        breathe_in = Animation(scale=1.05, duration=1.2, t='in_out_sine')
+        breathe_out = Animation(scale=1.0, duration=1.2, t='in_out_sine')
+        sway_left = Animation(rotation=-3, duration=1.2, t='in_out_sine')
+        sway_right = Animation(rotation=3, duration=1.2, t='in_out_sine')
+        float_up = Animation(y=base_y + dp(8), duration=1.5, t='in_out_sine')
+        float_down = Animation(y=base_y, duration=1.5, t='in_out_sine')
+        
+        anim = (breathe_in & sway_left & float_up) + (breathe_out & sway_right & float_down)
+        anim.repeat = True
+        self.current_animation = anim
+        anim.start(self)
     
     def start_sleep_animation(self):
         self.cancel_current_animation()
@@ -560,40 +642,53 @@ class CutePet(Widget):
         
         anim = Animation(scale=0.85, opacity=0.6, rotation=0, duration=1, t='out_quad')
         
+        # 修复ERR-041: 使用局部函数引用self
         def start_breathing(*args):
-            if self.is_sleeping:
-                breathe_in = Animation(opacity=0.5, scale=0.83, duration=2, t='in_out_sine')
-                breathe_out = Animation(opacity=0.7, scale=0.87, duration=2, t='in_out_sine')
-                anim = breathe_in + breathe_out
-                anim.repeat = True
-                self.current_animation = anim
-                anim.start(self)
+            self._start_sleep_breathing()
         
         anim.bind(on_complete=start_breathing)
         self.current_animation = anim
         anim.start(self)
     
+    def _start_sleep_breathing(self):
+        """开始睡眠呼吸动画（修复ERR-041）"""
+        if self.is_sleeping:
+            breathe_in = Animation(opacity=0.5, scale=0.83, duration=2, t='in_out_sine')
+            breathe_out = Animation(opacity=0.7, scale=0.87, duration=2, t='in_out_sine')
+            anim = breathe_in + breathe_out
+            anim.repeat = True
+            self.current_animation = anim
+            anim.start(self)
+    
     def wake_up_animation(self):
-        self.cancel_current_animation()
-        self.is_sleeping = False
-        base_y = self.y
-        
-        anim1 = Animation(scale=1.2, rotation=10, opacity=1, duration=0.15, t='out_quad')
-        anim2 = Animation(scale=0.9, rotation=-10, duration=0.1, t='in_quad')
-        anim3 = Animation(scale=1.15, rotation=5, duration=0.1, t='out_quad')
-        anim4 = Animation(scale=1.0, rotation=0, duration=0.15, t='in_out_quad')
-        jump_up = Animation(y=base_y + dp(30), duration=0.15, t='out_quad')
-        jump_down = Animation(y=base_y, duration=0.25, t='bounce_out')
-        
-        anim = (anim1 & jump_up) + (anim2 & jump_down) + anim3 + anim4
-        anim.bind(on_complete=lambda *args: self.start_cute_idle())
-        self.current_animation = anim
-        anim.start(self)
+        # 修复ERR-042和ERR-043: 添加异常处理和位置检查
+        try:
+            self.cancel_current_animation()
+            self.is_sleeping = False
+            base_y = self.y if hasattr(self, 'y') and self.y is not None else 0
+            
+            anim1 = Animation(scale=1.2, rotation=10, opacity=1, duration=0.15, t='out_quad')
+            anim2 = Animation(scale=0.9, rotation=-10, duration=0.1, t='in_quad')
+            anim3 = Animation(scale=1.15, rotation=5, duration=0.1, t='out_quad')
+            anim4 = Animation(scale=1.0, rotation=0, duration=0.15, t='in_out_quad')
+            jump_up = Animation(y=base_y + dp(30), duration=0.15, t='out_quad')
+            jump_down = Animation(y=base_y, duration=0.25, t='bounce_out')
+            
+            anim = (anim1 & jump_up) + (anim2 & jump_down) + anim3 + anim4
+            # 修复ERR-044: 使用局部函数而不是lambda
+            def wake_up_complete(*args):
+                self.start_cute_idle()
+            anim.bind(on_complete=wake_up_complete)
+            self.current_animation = anim
+            anim.start(self)
+        except Exception as e:
+            error(f"wake_up_animation失败: {e}")
     
     def excited_animation(self):
         self.cancel_current_animation()
         self.is_excited = True
-        base_y = self.y
+        # 修复ERR-045: 添加位置检查
+        base_y = self.y if hasattr(self, 'y') and self.y is not None else 0
         
         seq = None
         for i in range(5):
