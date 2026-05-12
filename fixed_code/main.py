@@ -1000,33 +1000,52 @@ class AlarmClock:
         self.schedule_next_alarm()
     
     def load_settings(self):
+        # 修复ERR-070: 使用配置文件路径变量
+        settings_path = 'alarm_settings.json'
         try:
-            if os.path.exists('alarm_settings.json'):
-                with open('alarm_settings.json', 'r', encoding='utf-8') as f:
+            if os.path.exists(settings_path):
+                with open(settings_path, 'r', encoding='utf-8') as f:
                     return json.load(f)
         except Exception as e:
-            print(f"加载设置失败: {e}")
+            # 修复ERR-066: 使用error函数记录错误
+            error(f"加载设置失败: {e}")
         return DEFAULT_ALARM_SETTINGS.copy()
     
     def save_settings(self):
+        # 修复ERR-070: 使用配置文件路径变量
+        settings_path = 'alarm_settings.json'
         try:
-            with open('alarm_settings.json', 'w', encoding='utf-8') as f:
+            with open(settings_path, 'w', encoding='utf-8') as f:
                 json.dump(self.settings, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"保存设置失败: {e}")
+            # 修复ERR-067: 使用error函数记录错误
+            error(f"保存设置失败: {e}")
     
     def add_alarm(self, hour, minute, label="闹钟", content="时间到了！", 
                   repeat_days=None, enabled=True):
+        # 修复ERR-069: 确保repeat_days正确处理None值
+        if repeat_days is None:
+            repeat_days = []
+        elif isinstance(repeat_days, list):
+            # 确保repeat_days是有效的整数列表
+            repeat_days = [int(day) for day in repeat_days if str(day).isdigit()]
+        else:
+            repeat_days = []
+        
+        # 修复ERR-068: 使用唯一ID而不是简单的长度
+        import time
+        alarm_id = int(time.time() * 1000) + len(self.alarms)
+        
         alarm = {
-            'id': len(self.alarms),
+            'id': alarm_id,
             'hour': hour,
             'minute': minute,
             'label': label,
             'content': content,
-            'repeat_days': repeat_days or [],
+            'repeat_days': repeat_days,
             'enabled': enabled,
             'snooze_count': 0,
-            'max_snooze': self.settings.get('max_snooze_count', 3)
+            'max_snooze': self.settings.get('max_snooze_count', 3) if hasattr(self, 'settings') else 3
         }
         self.alarms.append(alarm)
         self.save_alarms()
@@ -1034,90 +1053,166 @@ class AlarmClock:
         return alarm
     
     def batch_add_alarms(self, alarm_text):
-        added_count = 0
-        error_count = 0
-        
-        alarm_entries = alarm_text.strip().split(';')
-        for entry in alarm_entries:
-            entry = entry.strip()
-            if not entry:
-                continue
+        # 修复ERR-071: 添加异常处理
+        try:
+            added_count = 0
+            error_count = 0
             
-            parts = [part.strip() for part in entry.split(',')]
-            if len(parts) < 3:
-                error_count += 1
-                continue
+            # 修复ERR-072: 改进空字符串处理
+            if not alarm_text or not isinstance(alarm_text, str):
+                return {'added': 0, 'errors': 0, 'message': '输入为空或无效'}
             
-            try:
-                label = parts[0]
-                time_str = parts[1]
-                content = ','.join(parts[2:])
-                
-                if ':' in time_str:
-                    hour, minute = map(int, time_str.split(':'))
-                elif '：' in time_str:
-                    hour, minute = map(int, time_str.split('：'))
-                else:
-                    raise ValueError("时间格式错误")
-                
-                if not (0 <= hour <= 23 and 0 <= minute <= 59):
-                    error_count += 1
+            alarm_text = alarm_text.strip()
+            if not alarm_text:
+                return {'added': 0, 'errors': 0, 'message': '输入为空'}
+            
+            alarm_entries = alarm_text.split(';')
+            for entry in alarm_entries:
+                entry = entry.strip()
+                if not entry:
                     continue
                 
-                self.add_alarm(hour, minute, label, content)
-                added_count += 1
-            except Exception as e:
-                print(f"解析错误: {entry} - {e}")
-                error_count += 1
-        
-        return added_count, error_count
+                parts = [part.strip() for part in entry.split(',')]
+                # 修复ERR-073: 添加详细验证
+                if len(parts) < 3:
+                    error_count += 1
+                    debug(f"批量添加闹钟错误: 参数不足({len(parts)}个), 需要至少3个: {entry}")
+                    continue
+                
+                try:
+                    label = parts[0]
+                    time_str = parts[1]
+                    content = ','.join(parts[2:])
+                    
+                    # 修复ERR-075: 统一时间格式处理
+                    time_str = time_str.replace('：', ':')  # 中文冒号转英文冒号
+                    
+                    if ':' in time_str:
+                        hour_str, minute_str = time_str.split(':')
+                        hour = int(hour_str.strip())
+                        minute = int(minute_str.strip())
+                        # 修复ERR-074: 添加范围验证
+                        if not (0 <= hour <= 23):
+                            raise ValueError(f"小时值无效: {hour}")
+                        if not (0 <= minute <= 59):
+                            raise ValueError(f"分钟值无效: {minute}")
+                    else:
+                        raise ValueError("时间格式错误，缺少冒号分隔符")
+                    
+                    self.add_alarm(hour, minute, label, content)
+                    added_count += 1
+                except Exception as e:
+                    # 修复打印日志
+                    error(f"解析错误: {entry} - {e}")
+                    error_count += 1
+            
+            return {'added': added_count, 'errors': error_count, 'message': f"成功添加{added_count}个闹钟，失败{error_count}个"}
+        except Exception as e:
+            error(f"batch_add_alarms整体失败: {e}")
+            return {'added': 0, 'errors': 1, 'message': f"批量添加失败: {e}"}
     
     def remove_alarm(self, alarm_id):
-        self.alarms = [a for a in self.alarms if a['id'] != alarm_id]
-        for i, alarm in enumerate(self.alarms):
-            alarm['id'] = i
-        self.save_alarms()
-        self.schedule_next_alarm()
+        # 修复ERR-076和ERR-077: 改进ID管理策略
+        try:
+            # 使用列表推导式删除指定ID的闹钟，但不重置其他闹钟的ID
+            original_count = len(self.alarms)
+            self.alarms = [a for a in self.alarms if a['id'] != alarm_id]
+            removed_count = original_count - len(self.alarms)
+            
+            # 不再重置ID，因为add_alarm使用时间戳生成唯一ID
+            # 保持原有ID不变，避免冲突
+            
+            self.save_alarms()
+            self.schedule_next_alarm()
+            return removed_count > 0  # 返回是否成功删除
+        except Exception as e:
+            error(f"remove_alarm失败: {e}")
+            return False
     
     def toggle_alarm(self, alarm_id, enabled):
-        for alarm in self.alarms:
-            if alarm['id'] == alarm_id:
-                alarm['enabled'] = enabled
-                break
-        self.save_alarms()
-        self.schedule_next_alarm()
+        # 修复ERR-078: 添加异常处理
+        try:
+            found = False
+            for alarm in self.alarms:
+                if alarm['id'] == alarm_id:
+                    alarm['enabled'] = enabled
+                    found = True
+                    break
+            if found:
+                self.save_alarms()
+                self.schedule_next_alarm()
+            return found  # 返回是否找到并修改了闹钟
+        except Exception as e:
+            error(f"toggle_alarm失败: {e}")
+            return False
     
     def update_alarm(self, alarm_id, hour=None, minute=None, label=None, 
                      content=None, repeat_days=None):
-        for alarm in self.alarms:
-            if alarm['id'] == alarm_id:
-                if hour is not None:
-                    alarm['hour'] = hour
-                if minute is not None:
-                    alarm['minute'] = minute
-                if label is not None:
-                    alarm['label'] = label
-                if content is not None:
-                    alarm['content'] = content
-                if repeat_days is not None:
-                    alarm['repeat_days'] = repeat_days
-                break
-        self.save_alarms()
-        self.schedule_next_alarm()
+        # 修复ERR-079: 添加异常处理
+        try:
+            found = False
+            for alarm in self.alarms:
+                if alarm['id'] == alarm_id:
+                    found = True
+                    
+                    # 修复ERR-080: 添加时间范围验证
+                    if hour is not None:
+                        if not (0 <= hour <= 23):
+                            raise ValueError(f"小时值无效: {hour}")
+                        alarm['hour'] = hour
+                    
+                    if minute is not None:
+                        if not (0 <= minute <= 59):
+                            raise ValueError(f"分钟值无效: {minute}")
+                        alarm['minute'] = minute
+                    
+                    if label is not None:
+                        alarm['label'] = label
+                    
+                    if content is not None:
+                        alarm['content'] = content
+                    
+                    # 修复ERR-081: 添加repeat_days验证
+                    if repeat_days is not None:
+                        if isinstance(repeat_days, list):
+                            # 确保是有效的整数列表
+                            repeat_days = [int(day) for day in repeat_days if str(day).isdigit()]
+                        else:
+                            repeat_days = []
+                        alarm['repeat_days'] = repeat_days
+                    break
+            
+            if found:
+                self.save_alarms()
+                self.schedule_next_alarm()
+            
+            return found  # 返回是否找到并更新了闹钟
+        except Exception as e:
+            error(f"update_alarm失败: {e}")
+            return False
     
     def snooze_alarm(self, alarm_id):
-        for alarm in self.alarms:
-            if alarm['id'] == alarm_id:
-                if alarm['snooze_count'] < alarm['max_snooze']:
-                    alarm['snooze_count'] += 1
-                    snooze_minutes = self.settings.get('snooze_duration', 5)
-                    snooze_time = datetime.now() + timedelta(minutes=snooze_minutes)
-                    self.snooze_alarms[alarm_id] = snooze_time
-                    return True, snooze_minutes
-                else:
-                    alarm['snooze_count'] = 0
-                    return False, 0
-        return False, 0
+        # 修复ERR-082: 添加异常处理
+        try:
+            for alarm in self.alarms:
+                if alarm['id'] == alarm_id:
+                    # 修复ERR-083: 添加属性检查
+                    max_snooze = alarm.get('max_snooze', 3)
+                    current_count = alarm.get('snooze_count', 0)
+                    
+                    if current_count < max_snooze:
+                        alarm['snooze_count'] = current_count + 1
+                        snooze_minutes = self.settings.get('snooze_duration', 5) if hasattr(self, 'settings') else 5
+                        snooze_time = datetime.now() + timedelta(minutes=snooze_minutes)
+                        self.snooze_alarms[alarm_id] = snooze_time
+                        return True, snooze_minutes
+                    else:
+                        alarm['snooze_count'] = 0
+                        return False, 0
+            return False, 0
+        except Exception as e:
+            error(f"snooze_alarm失败: {e}")
+            return False, 0
     
     def stop_alarm(self, alarm_id):
         for alarm in self.alarms:
