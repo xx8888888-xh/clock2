@@ -1647,29 +1647,76 @@ class AlarmDialog(CutePopup):
     
     def save_alarm(self, instance):
         try:
-            hour = int(self.hour_spinner.text)
-            minute = int(self.minute_spinner.text)
-            label = self.label_input.text.strip() or '闹钟'
-            content = self.content_input.text.strip() or '时间到了！'
+            # 修复ERR-109: 验证用户输入
+            hour_str = self.hour_spinner.text.strip()
+            minute_str = self.minute_spinner.text.strip()
+            
+            if not hour_str or not minute_str:
+                raise ValueError("时间不能为空")
+            
+            hour = int(hour_str)
+            minute = int(minute_str)
+            
+            # 验证时间范围
+            if not (0 <= hour <= 23):
+                raise ValueError(f"小时必须在0-23之间: {hour}")
+            if not (0 <= minute <= 59):
+                raise ValueError(f"分钟必须在0-59之间: {minute}")
+            
+            label = self.label_input.text.strip()
+            content = self.content_input.text.strip()
+            
+            # 验证必填字段
+            if not label:
+                raise ValueError("闹钟名称不能为空")
+            
+            # 使用默认值但不掩盖空输入
+            if not content:
+                content = '时间到了！'
             
             repeat_days = [i for i, check in enumerate(self.day_checks) if check.active]
             
             if self.alarm_id is not None:
-                self.alarm_manager.update_alarm(
+                result = self.alarm_manager.update_alarm(
                     self.alarm_id, hour, minute, label, content, repeat_days
                 )
+                if not result:
+                    raise ValueError("更新闹钟失败，闹钟可能不存在")
             else:
-                self.alarm_manager.add_alarm(
+                new_alarm = self.alarm_manager.add_alarm(
                     hour, minute, label, content, repeat_days, True
                 )
+                if not new_alarm:
+                    raise ValueError("添加闹钟失败")
+            
             self.dismiss()
-        except ValueError:
-            pass
+            debug(f"成功保存闹钟: {label} {hour:02d}:{minute:02d}")
+        # 修复ERR-108: 不静默吞掉错误
+        except ValueError as e:
+            error(f"保存闹钟失败: {e}")
+            # 可以添加用户提示，例如显示弹窗
+            from kivy.uix.popup import Popup
+            popup = Popup(title='错误', content=Label(text=f"保存失败: {str(e)}"), size_hint=(0.7, 0.3))
+            popup.open()
     
     def delete_alarm(self, instance):
-        if self.alarm_id is not None:
-            self.alarm_manager.remove_alarm(self.alarm_id)
-            self.dismiss()
+        # 修复ERR-110: 添加异常处理和确认机制
+        try:
+            if self.alarm_id is not None:
+                # 确认删除（简单实现，可以增强为弹窗确认）
+                debug(f"删除闹钟确认: ID={self.alarm_id}")
+                
+                result = self.alarm_manager.remove_alarm(self.alarm_id)
+                if result:
+                    debug(f"闹钟 {self.alarm_id} 删除成功")
+                    self.dismiss()
+                else:
+                    error(f"删除闹钟失败: 闹钟 {self.alarm_id} 不存在")
+                    # 可以显示错误提示
+            else:
+                error("delete_alarm: 闹钟ID为空")
+        except Exception as e:
+            error(f"删除闹钟失败: {e}")
 
 
 class BatchAddDialog(CutePopup):
