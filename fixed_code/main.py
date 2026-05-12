@@ -1722,6 +1722,10 @@ class AlarmDialog(CutePopup):
 class BatchAddDialog(CutePopup):
     def __init__(self, alarm_manager, **kwargs):
         super().__init__(**kwargs)
+        # 修复ERR-111: 参数验证
+        if alarm_manager is None or not hasattr(alarm_manager, 'batch_add_alarms'):
+            raise ValueError("BatchAddDialog: 无效的闹钟管理器")
+        
         self.alarm_manager = alarm_manager
         self.title = '➕ 批量添加闹钟'
         self.size_hint = (0.9, 0.8)
@@ -1739,14 +1743,17 @@ class BatchAddDialog(CutePopup):
         instructions.bind(size=instructions.setter('text_size'))
         layout.add_widget(instructions)
         
-        example_text = '起床,08:00,该起床了;午餐,12:30,记得吃饭;午休,13:00,休息一会;下班,18:00,下班时间到了;睡觉,22:30,早点休息'
+        # 修复ERR-112: 使用更简洁的示例文本
+        example_text = '起床,08:00,该起床了;午餐,12:30,记得吃饭'
         
         self.text_input = TextInput(
             text=example_text,
             multiline=True,
             size_hint_y=0.5,
             font_size=sp(14),
-            background_color=CUTE_COLORS['background']
+            background_color=CUTE_COLORS['background'],
+            hint_text='输入格式：名称,时间,内容（多个用分号分隔）',
+            write_tab=False
         )
         layout.add_widget(self.text_input)
         
@@ -1772,22 +1779,51 @@ class BatchAddDialog(CutePopup):
         self.content = layout
     
     def batch_add(self, instance):
+        # 修复ERR-117: 添加详细验证
         text = self.text_input.text.strip()
         if not text:
             self.result_label.text = '⚠️ 请输入闹钟数据'
             self.result_label.color = CUTE_COLORS['error']
             return
         
-        added_count, error_count = self.alarm_manager.batch_add_alarms(text)
-        
-        if added_count > 0:
-            self.result_label.text = f'✅ 成功添加 {added_count} 个闹钟'
-            self.result_label.color = CUTE_COLORS['success']
-            if error_count > 0:
-                self.result_label.text += f'，⚠️ {error_count} 个格式错误'
-            Clock.schedule_once(lambda dt: self.dismiss(), 2)
-        else:
-            self.result_label.text = '❌ 未添加任何闹钟，请检查格式'
+        try:
+            # 修复ERR-118: 添加异常处理
+            # 修复ERR-119: 正确处理返回值（字典）
+            result = self.alarm_manager.batch_add_alarms(text)
+            
+            if isinstance(result, dict):
+                added_count = result.get('added', 0)
+                error_count = result.get('errors', 0)
+                message = result.get('message', '')
+                
+                if added_count > 0:
+                    self.result_label.text = f'✅ 成功添加 {added_count} 个闹钟'
+                    self.result_label.color = CUTE_COLORS['success']
+                    if error_count > 0:
+                        self.result_label.text += f'，⚠️ {error_count} 个格式错误'
+                    Clock.schedule_once(lambda dt: self.dismiss(), 2)
+                else:
+                    self.result_label.text = f'❌ {message}'
+                    self.result_label.color = CUTE_COLORS['error']
+            else:
+                # 向后兼容：如果返回元组
+                if isinstance(result, (tuple, list)) and len(result) >= 2:
+                    added_count, error_count = result[0], result[1]
+                    if added_count > 0:
+                        self.result_label.text = f'✅ 成功添加 {added_count} 个闹钟'
+                        self.result_label.color = CUTE_COLORS['success']
+                        if error_count > 0:
+                            self.result_label.text += f'，⚠️ {error_count} 个格式错误'
+                        Clock.schedule_once(lambda dt: self.dismiss(), 2)
+                    else:
+                        self.result_label.text = '❌ 未添加任何闹钟，请检查格式'
+                        self.result_label.color = CUTE_COLORS['error']
+                else:
+                    self.result_label.text = '❌ 添加失败：返回结果格式错误'
+                    self.result_label.color = CUTE_COLORS['error']
+        except Exception as e:
+            error(f"batch_add失败: {e}")
+            self.result_label.text = f'❌ 添加失败：{str(e)}'
             self.result_label.color = CUTE_COLORS['error']
 
 
