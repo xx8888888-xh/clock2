@@ -40,13 +40,84 @@ except ImportError:
     HAS_VIBRATOR = False
     print("警告: vibrator模块不可用，振动功能将禁用")
 
-from plyer import notification
+# 修复ERR-001: notification导入异常处理
+try:
+    from plyer import notification
+    HAS_NOTIFICATION = True
+except ImportError:
+    HAS_NOTIFICATION = False
+    print("警告: notification模块不可用，通知功能将禁用")
+
 import time
 
-# 导入新增功能模块
-from pet_mood import PetMoodSystem
-from weather import WeatherAPI
-from calendar_integration import CalendarIntegration
+# 修复BUG-002: 添加自定义模块异常处理
+try:
+    from simple_logger import info, warning, error, debug, log_exception, log_method_call
+    HAS_LOGGER = True
+except ImportError:
+    HAS_LOGGER = False
+    # 修复ERR-003和ERR-004: 改进日志回退函数
+    import sys
+    def info(msg): 
+        if msg: 
+            print(f"[INFO] {msg}")
+    def warning(msg): 
+        if msg: 
+            print(f"[WARN] {msg}")
+    def error(msg): 
+        if msg: 
+            print(f"[ERROR] {msg}")
+    def debug(msg): 
+        if msg and '--debug' in sys.argv:  # 只在调试模式输出
+            print(f"[DEBUG] {msg}")
+    def log_exception(e, ctx=""): 
+        if e: 
+            print(f"[EXCEPTION] {ctx}: {type(e).__name__}: {e}")
+    def log_method_call(func): 
+        return func
+    info("simple_logger模块不可用，使用简单日志回退")
+
+# 修复BUG-002: 其他自定义模块异常处理
+try:
+    from pet_mood import PetMoodSystem
+    from weather import WeatherAPI
+    from calendar_integration import CalendarIntegration
+    HAS_EXTRA_MODULES = True
+except ImportError as e:
+    HAS_EXTRA_MODULES = False
+    error(f"扩展模块导入失败: {e}")
+    # 修复ERR-005: 创建更完整的回退类
+    class PetMoodSystem:
+        def __init__(self):
+            self.moods = ['normal', 'happy', 'sad', 'angry', 'sleepy']
+        def get_current_mood(self, current_time=None, weather_impact=None, calendar_event=None): 
+            return 'normal'
+        def update_mood(self, interaction_type):
+            return 'normal'
+        def get_mood_emoji(self, mood=None):
+            return '😊'
+    
+    class WeatherAPI:
+        def __init__(self, api_key='demo_key'):
+            self.api_key = api_key
+            self.has_data = False
+            self.last_weather_data = None
+        def get_current_weather(self, city='Beijing'): 
+            return {'temp': 25, 'description': '晴天', 'humidity': 50, 'wind_speed': 5}
+        def _get_default_weather(self):
+            return {'temp': 25, 'description': '默认天气'}
+    
+    class CalendarIntegration:
+        def __init__(self): 
+            self.events = []
+        def get_next_event(self): 
+            return None
+        def get_today_events(self):
+            return []
+        def add_event(self, *args, **kwargs):
+            return {'success': False, 'reason': '回退模式'}
+        def get_event_emoji(self, event_type):
+            return '📅'
 
 # 修复BUG-002: 添加自定义模块异常处理
 try:
@@ -82,18 +153,26 @@ except ImportError as e:
         def get_next_event(self): return None
 
 # 设置窗口透明背景
-# 修复BUG-003: 使用几乎透明而不是完全透明，避免窗口不可见
-Config.set('graphics', 'background_color', '0,0,0,0.01')
+# 修复BUG-003和ERR-006: 使用更合适的透明度值
+Config.set('graphics', 'background_color', '0,0,0,0.05')  # 5%透明度，更可靠
 
 # ==================== 颜色主题 ====================
+# 修复ERR-007: 安全颜色获取函数
+def safe_get_color(hex_color, default=(1, 1, 1, 1)):
+    try:
+        return get_color_from_hex(hex_color)
+    except Exception as e:
+        error(f"颜色解析失败 {hex_color}: {e}")
+        return default
+
 CUTE_COLORS = {
-    'primary': get_color_from_hex('#FF8FB1'),
-    'secondary': get_color_from_hex('#B5EAEA'),
-    'accent': get_color_from_hex('#FFE194'),
-    'purple': get_color_from_hex('#D4A5FF'),
-    'coral': get_color_from_hex('#FF9A8B'),
-    'background': get_color_from_hex('#FFF5F7'),
-    'text': get_color_from_hex('#5A4A4A'),
+    'primary': safe_get_color('#FF8FB1', (1, 0.56, 0.69, 1)),
+    'secondary': safe_get_color('#B5EAEA', (0.71, 0.92, 0.92, 1)),
+    'accent': safe_get_color('#FFE194', (1, 0.88, 0.58, 1)),
+    'purple': safe_get_color('#D4A5FF', (0.83, 0.65, 1, 1)),
+    'coral': safe_get_color('#FF9A8B', (1, 0.60, 0.55, 1)),
+    'background': safe_get_color('#FFF5F7', (1, 0.96, 0.97, 1)),
+    'text': safe_get_color('#5A4A4A', (0.35, 0.29, 0.29, 1)),
     'white': (1, 1, 1, 1),
     'shadow': (0, 0, 0, 0.15),
     'success': (0.3, 0.8, 0.3, 1),
@@ -101,20 +180,29 @@ CUTE_COLORS = {
 }
 
 # 默认配置
-DEFAULT_PET_SETTINGS = {
-    'size': 160,
-    'opacity': 1.0,
-    'sleep_start_hour': 22,
-    'sleep_end_hour': 7,
+# 修复ERR-009: 添加类型注释
+typing_available = False
+try:
+    from typing import Dict, Any, Optional
+    typing_available = True
+except ImportError:
+    pass
+
+DEFAULT_PET_SETTINGS: Dict[str, Any] = {
+    'size': 160,               # 宠物大小（像素）
+    'opacity': 1.0,            # 不透明度（0.0-1.0）
+    'sleep_start_hour': 22,    # 睡眠开始时间（小时，0-23）
+    'sleep_end_hour': 7,       # 睡眠结束时间（小时，0-23）
 }
 
-DEFAULT_ALARM_SETTINGS = {
-    'snooze_duration': 5,
-    'max_snooze_count': 3,
-    'vibrate': True,
-    'sound_enabled': True,
-    'volume': 0.8,
-    'banner_time': 5,
+DEFAULT_ALARM_SETTINGS: Dict[str, Any] = {
+    'snooze_duration': 5,      # 贪睡时长（分钟）
+    'max_snooze_count': 3,     # 最大贪睡次数
+    # 修复ERR-008: 根据实际支持情况设置振动默认值
+    'vibrate': HAS_VIBRATOR,   # 是否启用振动
+    'sound_enabled': True,     # 是否启用声音
+    'volume': 0.8,             # 音量（0.0-1.0）
+    'banner_time': 5,          # 横幅显示时间（秒）
 }
 
 # ==================== 横幅部件 ====================
@@ -191,6 +279,23 @@ class CuteBanner(Widget):
             self.hide_event.cancel()
             self.hide_event = None
 
+# 修复BUG-004: 跨午夜时间处理函数
+def is_sleeping_time(current_hour, start_hour=22, end_hour=7):
+    """判断是否是睡眠时间（支持跨午夜）
+    Args:
+        current_hour: 当前小时 (0-23)
+        start_hour: 睡眠开始时间 (0-23)
+        end_hour: 睡眠结束时间 (0-23)
+    Returns:
+        bool: 是否在睡眠时间内
+    """
+    if start_hour <= end_hour:
+        # 不跨午夜的情况: start_hour <= current_hour < end_hour
+        return start_hour <= current_hour < end_hour
+    else:
+        # 跨午夜的情况: current_hour >= start_hour 或 current_hour < end_hour
+        return current_hour >= start_hour or current_hour < end_hour
+
 
 # ==================== 睡眠气泡 ====================
 class SleepBubble(Widget):
@@ -203,7 +308,8 @@ class SleepBubble(Widget):
         
         with self.canvas:
             Color(1, 1, 1, 0.8)
-            self.bubble = Ellipse(pos=self.pos, size=self.size)
+            # 修复BUG-006: 避免在__init__中直接使用self.pos，使用默认值
+            self.bubble = Ellipse(pos=(0, 0), size=self.size)
         
         self.bind(pos=self.update_bubble, size=self.update_bubble)
         
