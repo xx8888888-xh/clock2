@@ -1918,15 +1918,39 @@ class TimerDialog(CutePopup):
         super().on_dismiss()
     
     def add_timer(self, instance):
+        # 修复ERR-125: 添加详细验证和异常处理
         try:
-            minutes = int(self.minute_input.text or 0)
-            seconds = int(self.sec_input.text or 0)
-            label = self.label_input.text.strip() or '计时器'
+            # 获取输入值
+            minute_text = self.minute_input.text.strip()
+            sec_text = self.sec_input.text.strip()
+            label_text = self.label_input.text.strip()
+            
+            # 验证输入
+            if not minute_text:
+                minute_text = '0'
+            if not sec_text:
+                sec_text = '0'
+                
+            minutes = int(minute_text)
+            seconds = int(sec_text)
+            label = label_text or '计时任务'
+            
+            # 验证范围
+            if minutes < 0 or minutes > 1440:
+                raise ValueError(f"分钟必须在0-1440之间: {minutes}")
+            if seconds < 0 or seconds > 59:
+                raise ValueError(f"秒必须在0-59之间: {seconds}")
             
             if minutes > 0 or seconds > 0:
-                self.timer_manager.add_timer(minutes, seconds, label)
+                result = self.timer_manager.add_timer(minutes, seconds, label)
+                if result:
+                    debug(f"添加计时器成功: {label} ({minutes}分{seconds}秒)")
                 self.update_timer_list(0)
-        except ValueError:
+            else:
+                debug("添加计时器: 时间为零，未添加")
+        except ValueError as e:
+            error(f"add_timer失败: {e}")
+            # 可以显示用户提示
             pass
     
     def update_timer_list(self, dt):
