@@ -217,27 +217,43 @@ class CuteBanner(Widget):
         
         with self.canvas.before:
             Color(*CUTE_COLORS['shadow'])
+            # 修复ERR-010: 避免在__init__中使用可能未确定的self.x/self.y
             self.shadow_rect = RoundedRectangle(
-                pos=(self.x + dp(3), self.y - dp(3)),
+                pos=(0 + dp(3), 0 - dp(3)),  # 使用默认位置
                 size=self.size,
                 radius=[dp(20)]
             )
             Color(*CUTE_COLORS['primary'])
+            # 修复ERR-010: 使用默认位置
             self.bg_rect = RoundedRectangle(
-                pos=self.pos,
+                pos=(0, 0),  # 使用默认位置
                 size=self.size,
                 radius=[dp(20)]
             )
         
+        # 修复ERR-011: 先定义方法再绑定
+        def update_bg(self, *args):
+            # 修复ERR-013: 添加异常处理
+            try:
+                self.shadow_rect.pos = (self.x + dp(3), self.y - dp(3))
+                self.shadow_rect.size = self.size
+                self.bg_rect.pos = self.pos
+                self.bg_rect.size = self.size
+            except Exception as e:
+                error(f"update_bg失败: {e}")
+        
+        self.update_bg = update_bg.__get__(self, type(self))
         self.bind(pos=self.update_bg, size=self.update_bg)
         
         content_layout = BoxLayout(orientation='vertical', padding=dp(15), spacing=dp(5))
+        # 修复ERR-012: 使用固定高度而不是比例
         self.title_label = Label(
             text='⏰ 闹钟提醒',
             font_size=sp(22),
             bold=True,
             color=CUTE_COLORS['white'],
-            size_hint_y=0.45
+            size_hint_y=None,
+            height=dp(35)  # 固定高度
         )
         content_layout.add_widget(self.title_label)
         
@@ -245,39 +261,50 @@ class CuteBanner(Widget):
             text='时间到了！',
             font_size=sp(16),
             color=CUTE_COLORS['white'],
-            size_hint_y=0.55
+            size_hint_y=None,
+            height=dp(45)  # 固定高度
         )
         content_layout.add_widget(self.content_label)
         self.add_widget(content_layout)
     
-    def update_bg(self, *args):
-        self.shadow_rect.pos = (self.x + dp(3), self.y - dp(3))
-        self.shadow_rect.size = self.size
-        self.bg_rect.pos = self.pos
-        self.bg_rect.size = self.size
-    
     def show(self, title, content, duration=5):
-        self.title_label.text = f"⏰ {title}"
-        self.content_label.text = content
-        
-        if self.hide_event:
-            self.hide_event.cancel()
-        
-        anim = Animation(opacity=1, duration=0.3, t='out_quad')
-        anim.start(self)
-        self.hide_event = Clock.schedule_once(lambda dt: self.hide(), duration)
+        # 修复ERR-014: 改进事件取消逻辑
+        try:
+            self.title_label.text = f"⏰ {title}"
+            self.content_label.text = content
+            
+            if self.hide_event is not None:
+                self.hide_event.cancel()
+            
+            anim = Animation(opacity=1, duration=0.3, t='out_quad')
+            anim.start(self)
+            
+            # 修复ERR-017: 使用局部函数而不是lambda
+            def hide_callback(dt):
+                self.hide()
+            self.hide_event = Clock.schedule_once(hide_callback, duration)
+        except Exception as e:
+            error(f"show失败: {e}")
     
     def hide(self):
-        if self.hide_event:
-            self.hide_event.cancel()
-            self.hide_event = None
-        anim = Animation(opacity=0, duration=0.3, t='in_quad')
-        anim.start(self)
+        # 修复ERR-015: 改进检查逻辑
+        try:
+            if self.hide_event is not None:
+                self.hide_event.cancel()
+                self.hide_event = None
+            anim = Animation(opacity=0, duration=0.3, t='in_quad')
+            anim.start(self)
+        except Exception as e:
+            error(f"hide失败: {e}")
     
     def cleanup(self):
-        if self.hide_event:
-            self.hide_event.cancel()
-            self.hide_event = None
+        # 修复ERR-016: 添加异常处理
+        try:
+            if self.hide_event is not None:
+                self.hide_event.cancel()
+                self.hide_event = None
+        except Exception as e:
+            error(f"cleanup失败: {e}")
 
 # 修复BUG-004: 跨午夜时间处理函数
 def is_sleeping_time(current_hour, start_hour=22, end_hour=7):
@@ -289,6 +316,16 @@ def is_sleeping_time(current_hour, start_hour=22, end_hour=7):
     Returns:
         bool: 是否在睡眠时间内
     """
+    # 修复ERR-018: 添加输入验证
+    if not isinstance(current_hour, (int, float)):
+        raise TypeError(f"current_hour必须是数字，得到{type(current_hour)}")
+    if not (0 <= current_hour <= 23):
+        raise ValueError(f"current_hour必须在0-23之间，得到{current_hour}")
+    if not (0 <= start_hour <= 23):
+        raise ValueError(f"start_hour必须在0-23之间，得到{start_hour}")
+    if not (0 <= end_hour <= 23):
+        raise ValueError(f"end_hour必须在0-23之间，得到{end_hour}")
+    
     if start_hour <= end_hour:
         # 不跨午夜的情况: start_hour <= current_hour < end_hour
         return start_hour <= current_hour < end_hour
@@ -311,6 +348,18 @@ class SleepBubble(Widget):
             # 修复BUG-006: 避免在__init__中直接使用self.pos，使用默认值
             self.bubble = Ellipse(pos=(0, 0), size=self.size)
         
+        # 修复ERR-020: 先定义方法再绑定
+        def update_bubble(self, *args):
+            # 修复ERR-019和ERR-021: 添加异常处理和位置更新
+            try:
+                self.bubble.pos = self.pos
+                self.bubble.size = self.size
+                self.label.pos = self.pos
+                self.label.size = self.size
+            except Exception as e:
+                error(f"update_bubble失败: {e}")
+        
+        self.update_bubble = update_bubble.__get__(self, type(self))
         self.bind(pos=self.update_bubble, size=self.update_bubble)
         
         self.label = Label(
@@ -318,16 +367,10 @@ class SleepBubble(Widget):
             font_size=sp(20),
             bold=True,
             color=(0.4, 0.4, 0.6, 1),
-            pos=self.pos,
+            pos=(0, 0),  # 修复ERR-021: 使用默认位置
             size=self.size
         )
         self.add_widget(self.label)
-    
-    def update_bubble(self, *args):
-        self.bubble.pos = self.pos
-        self.bubble.size = self.size
-        self.label.pos = self.pos
-        self.label.size = self.size
     
     def float_up(self):
         if self.current_anim:
