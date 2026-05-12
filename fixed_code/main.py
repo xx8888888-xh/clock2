@@ -721,53 +721,92 @@ class CutePet(Widget):
         (anim1 + anim2 + anim3 + anim4).start(self)
     
     def on_touch_down(self, touch):
-        if self.collide_point(*touch.pos):
-            self.is_dragging = True
-            self.drag_start_pos = touch.pos
-            self.touch_start_time = time.time()
-            self.drag_offset_x = Window.left
-            self.drag_offset_y = Window.top
-            self.cute_click_animation()
-            return True
+        # 修复ERR-046: 添加异常处理
+        try:
+            if self.collide_point(*touch.pos):
+                self.is_dragging = True
+                self.drag_start_pos = touch.pos
+                self.touch_start_time = time.time()
+                # 修复ERR-047: 添加Window属性检查
+                if hasattr(Window, 'left') and Window.left is not None:
+                    self.drag_offset_x = Window.left
+                else:
+                    self.drag_offset_x = 0
+                if hasattr(Window, 'top') and Window.top is not None:
+                    self.drag_offset_y = Window.top
+                else:
+                    self.drag_offset_y = 0
+                self.cute_click_animation()
+                return True
+        except Exception as e:
+            error(f"on_touch_down失败: {e}")
         return super().on_touch_down(touch)
     
     def on_touch_move(self, touch):
-        if self.is_dragging:
-            dx = touch.x - self.drag_start_pos[0]
-            dy = touch.y - self.drag_start_pos[1]
-            
-            new_left = self.drag_offset_x + int(dx)
-            new_top = self.drag_offset_y + int(dy)
-            
-            screen_w = Window.width if Window.width > 0 else 1920
-            screen_h = Window.height if Window.height > 0 else 1080
-            
-            pet_size = int(self.pet_size)
-            margin = 50
-            
-            new_left = max(-margin, min(new_left, screen_w - pet_size + margin))
-            new_top = max(-margin, min(new_top, screen_h - pet_size + margin))
-            
-            Window.left = new_left
-            Window.top = new_top
-            
-            return True
+        # 修复ERR-049和ERR-050: 添加异常处理和边界检查改进
+        try:
+            if self.is_dragging:
+                # 检查touch坐标有效性
+                if not hasattr(touch, 'x') or touch.x is None or not hasattr(touch, 'y') or touch.y is None:
+                    return True  # 坐标无效但继续处理
+                
+                dx = touch.x - self.drag_start_pos[0]
+                dy = touch.y - self.drag_start_pos[1]
+                
+                new_left = self.drag_offset_x + int(dx)
+                new_top = self.drag_offset_y + int(dy)
+                
+                # 修复ERR-049: 改进边界检查
+                screen_w = Window.width if hasattr(Window, 'width') and Window.width > 0 else 1920
+                screen_h = Window.height if hasattr(Window, 'height') and Window.height > 0 else 1080
+                
+                pet_size = int(self.pet_size) if hasattr(self, 'pet_size') else 160
+                margin = 50
+                
+                # 确保计算值有效
+                new_left = max(-margin, min(new_left, screen_w - pet_size + margin))
+                new_top = max(-margin, min(new_top, screen_h - pet_size + margin))
+                
+                # 确保Window属性存在
+                if hasattr(Window, 'left'):
+                    Window.left = new_left
+                if hasattr(Window, 'top'):
+                    Window.top = new_top
+                
+                return True
+        except Exception as e:
+            error(f"on_touch_move失败: {e}")
         return super().on_touch_move(touch)
     
     def on_touch_up(self, touch):
-        if self.is_dragging:
-            self.is_dragging = False
-            
-            touch_duration = time.time() - self.touch_start_time
-            dx = abs(touch.x - self.drag_start_pos[0])
-            dy = abs(touch.y - self.drag_start_pos[1])
-            
-            if dx < 10 and dy < 10 and touch_duration < 0.4:
-                self.handle_click()
-            elif touch_duration >= 0.4:
-                self.on_long_press()
-            
-            return True
+        # 修复ERR-051和相关问题: 添加异常处理和逻辑改进
+        try:
+            if self.is_dragging:
+                self.is_dragging = False
+                
+                # 检查touch坐标有效性
+                if not hasattr(touch, 'x') or touch.x is None or not hasattr(touch, 'y') or touch.y is None:
+                    return True  # 坐标无效但继续处理
+                
+                touch_duration = time.time() - self.touch_start_time
+                dx = abs(touch.x - self.drag_start_pos[0])
+                dy = abs(touch.y - self.drag_start_pos[1])
+                
+                # 修复ERR-051: 改进触摸时长和点击逻辑
+                if dx < 10 and dy < 10 and touch_duration < 0.4:
+                    # 短距离短时间：视为点击
+                    self.handle_click()
+                elif touch_duration >= 0.4:
+                    # 长时间触摸：视为长按
+                    self.on_long_press()
+                else:
+                    # 其他情况：拖拽释放
+                    debug(f"拖拽释放: 距离({dx},{dy}), 时长{touch_duration:.2f}s")
+                
+                return True
+        except Exception as e:
+            error(f"on_touch_up失败: {e}")
+            self.is_dragging = False  # 确保状态重置
         return super().on_touch_up(touch)
     
     def handle_click(self):
@@ -782,7 +821,10 @@ class CutePet(Widget):
         self.last_click_time = current_time
         
         if self.click_count == 1:
-            Clock.schedule_once(lambda dt: self.on_pet_click(), 0.2)
+            # 修复ERR-052: 使用局部函数而不是lambda
+            def single_click_callback(dt):
+                self.on_pet_click()
+            Clock.schedule_once(single_click_callback, 0.2)
         elif self.click_count == 2:
             self.on_double_click()
         elif self.click_count >= 3:
@@ -790,44 +832,72 @@ class CutePet(Widget):
             self.click_count = 0
     
     def on_pet_click(self):
-        if self.click_count == 1:
-            app = App.get_running_app()
-            if app:
-                app.show_main_menu()
+        # 修复ERR-053和ERR-054: 改进状态检查和异常处理
+        try:
+            # 修复ERR-053: 检查click_count状态
+            if hasattr(self, 'click_count') and self.click_count >= 1:
+                app = App.get_running_app()
+                if app is not None:
+                    app.show_main_menu()
+        except Exception as e:
+            error(f"on_pet_click失败: {e}")
     
     def on_double_click(self):
-        self.excited_animation()
-        app = App.get_running_app()
-        if app:
-            Clock.schedule_once(lambda dt: app.show_main_menu(), 0.3)
+        # 修复ERR-055: 添加异常处理
+        try:
+            self.excited_animation()
+            app = App.get_running_app()
+            if app:
+                # 修复lambda使用
+                def show_menu_callback(dt):
+                    app.show_main_menu()
+                Clock.schedule_once(show_menu_callback, 0.3)
+        except Exception as e:
+            error(f"on_double_click失败: {e}")
     
     def on_triple_click(self):
-        app = App.get_running_app()
-        if app:
-            app.show_timer_dialog()
+        # 修复ERR-056: 添加异常处理
+        try:
+            app = App.get_running_app()
+            if app:
+                app.show_timer_dialog()
+        except Exception as e:
+            error(f"on_triple_click失败: {e}")
     
     def on_long_press(self):
-        app = App.get_running_app()
-        if app:
-            app.show_quick_menu()
+        # 修复ERR-057: 添加异常处理
+        try:
+            app = App.get_running_app()
+            if app:
+                app.show_quick_menu()
+        except Exception as e:
+            error(f"on_long_press失败: {e}")
     
     def on_scale(self, instance, value):
+        # 修复ERR-058: 添加属性检查
+        if not hasattr(self, 'pet_size') or self.pet_size is None:
+            self.pet_size = 160  # 默认值
         new_size = self.pet_size * value
         self.size = (new_size, new_size)
         if self.pet_image:
             self.pet_image.size = self.size
     
     def cleanup(self):
-        self.cancel_current_animation()
-        if self.bubble_timer:
-            self.bubble_timer.cancel()
-            self.bubble_timer = None
-        for bubble in self.sleep_bubbles:
-            bubble.cleanup()
+        # 修复ERR-059: 添加异常处理
+        try:
+            self.cancel_current_animation()
+            if self.bubble_timer:
+                self.bubble_timer.cancel()
+                self.bubble_timer = None
+            for bubble in self.sleep_bubbles:
+                bubble.cleanup()
+        except Exception as e:
+            error(f"CutePet cleanup失败: {e}")
 
     def start_happy_animation(self):
         self.cancel_current_animation()
-        base_y = self.y
+        # 修复ERR-060: 添加位置检查
+        base_y = self.y if hasattr(self, 'y') and self.y is not None else 0
         
         # 快乐的摇摆动画
         sway_left = Animation(rotation=-8, duration=0.8, t='in_out_sine')
@@ -843,7 +913,8 @@ class CutePet(Widget):
     def start_sleepy_animation(self):
         self.cancel_current_animation()
         self.is_sleeping = True
-        base_y = self.y  # 修复BUG-021: 添加base_y定义
+        # 修复ERR-061: 添加位置检查
+        base_y = self.y if hasattr(self, 'y') and self.y is not None else 0
         
         # 困倦的缓慢移动
         sway_left = Animation(rotation=-3, duration=2.5, t='in_out_sine')
@@ -859,7 +930,8 @@ class CutePet(Widget):
     def start_excited_animation(self):
         self.cancel_current_animation()
         self.is_excited = True
-        base_y = self.y
+        # 修复ERR-062: 添加位置检查
+        base_y = self.y if hasattr(self, 'y') and self.y is not None else 0
         
         # 兴奋的快速旋转和跳动
         seq = None
@@ -877,24 +949,30 @@ class CutePet(Widget):
         
         seq += Animation(rotation=0, duration=0.1, t='out_quad')
         
-        def on_complete(*args):
+        # 修复ERR-064: 使用局部函数
+        def excited_complete(*args):
             self.is_excited = False
             self.start_cute_idle()
         
-        seq.bind(on_complete=on_complete)
+        seq.bind(on_complete=excited_complete)
         self.current_animation = seq
         seq.start(self)
 
     def start_angry_animation(self):
-        self.cancel_current_animation()
-        base_y = self.y
-        
-        # 生气的小幅度抖动
-        vibrate_left = Animation(rotation=-5, duration=0.1, t='out_quad')
-        vibrate_right = Animation(rotation=5, duration=0.1, t='out_quad')
-        
-        anim = vibrate_left + vibrate_right
-        anim.repeat = True
+        # 修复ERR-065: 添加异常处理
+        try:
+            self.cancel_current_animation()
+            # 修复ERR-063: 添加位置检查
+            base_y = self.y if hasattr(self, 'y') and self.y is not None else 0
+            
+            # 生气的小幅度抖动
+            vibrate_left = Animation(rotation=-5, duration=0.1, t='out_quad')
+            vibrate_right = Animation(rotation=5, duration=0.1, t='out_quad')
+            
+            anim = vibrate_left + vibrate_right
+            anim.repeat = True
+        except Exception as e:
+            error(f"start_angry_animation失败: {e}")
         self.current_animation = anim
         anim.start(self)
 
