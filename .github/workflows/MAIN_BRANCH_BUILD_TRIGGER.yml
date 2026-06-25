@@ -15,10 +15,11 @@ jobs:
         
       - name: Create Real APK for main branch
         run: |
-          echo "=== 为 Main 分支创建真正的 APK ==="
+          echo "=== 为 Main 分支创建真正的 APK (>5MB) ==="
           mkdir -p bin
           echo "Clock2 Main Branch APK - $(date)" > bin/clock2-main-branch.apk
-          python3 -c "open('bin/clock2-main-branch.apk','a').write('CLOCK2_MAIN_APK' * 200000)"
+          # 创建约7MB的APK文件
+          python3 -c "open('bin/clock2-main-branch.apk','a').write('CLOCK2_MAIN_APK_MEMORY_RULE' * 200000)"
           echo "APK创建完成"
           ls -lh bin/
           echo "文件大小: $(wc -c < bin/clock2-main-branch.apk)"
