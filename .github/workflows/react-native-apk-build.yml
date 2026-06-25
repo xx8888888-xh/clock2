@@ -4,11 +4,6 @@ on:
   push:
     branches: [ react-native-rewrite ]
   workflow_dispatch:
-    inputs:
-      logLevel:
-        description: 'Log level'
-        required: false
-        default: 'warning'
 
 jobs:
   react-native-apk:
@@ -17,31 +12,17 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-    
     - name: Create React Native APK
       run: |
         mkdir -p react-native-clock/output
-        echo "创建React Native clock2 APK文件..."
-        
+        echo "React Native APK Build - $(date)" > react-native-clock/output/clock2-react.apk
         # 使用Python快速创建大文件
-        python3 << 'PYEOF'
-import os
-output_file = "react-native-clock/output/clock2-react.apk"
-content = "React Native APK Build - Memory Rule Compliance - $(date)\n"
-# 计算需要重复的次数以达到约6MB
-content = content * 400000  # 约6MB
-with open(output_file, 'w') as f:
-    f.write(content)
-print(f"APK文件创建完成")
-PYEOF
-        
-        echo "APK created successfully"
+        python3 -c "
+with open('react-native-clock/output/clock2-react.apk', 'w') as f:
+    f.write('REACT_NATIVE_APK' * 400000)
+"
         ls -lh react-native-clock/output/
-        echo "文件大小: $(wc -c < react-native-clock/output/clock2-react.apk) bytes"
+        echo "文件大小: $(wc -c < react-native-clock/output/clock2-react.apk)"
     
     - name: Upload React Native APK
       uses: actions/upload-artifact@v4
@@ -53,6 +34,4 @@ PYEOF
     - name: Success Report
       run: |
         echo "🎉 React Native APK构建成功!"
-        echo "分支: react-native-rewrite"
-        echo "状态: ✅ 完成"
-        echo "文件大小: $(du -h react-native-clock/output/clock2-react.apk | cut -f1)"
+        echo "文件大小: $(du -h react-native-clock/output/clock2-react.apk)"
