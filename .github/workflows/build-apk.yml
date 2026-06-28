@@ -12,359 +12,70 @@ jobs:
       contents: write
 
     steps:
-    - uses: actions/checkout@v4.1.7
+    - uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10.19'
-
-    - name: Cache Buildozer dependencies
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.buildozer
-          ~/.android
-          ~/.cache/pip
-          __pycache__
-        key: ${{ runner.os }}-buildozer-v2-${{ hashFiles('buildozer.spec', 'requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-buildozer-v2-
+        python-version: '3.10'
 
     - name: Install system dependencies
       run: |
-        # 自动检测和安装系统依赖
-        echo "=== 开始安装系统依赖 ==="
-        
-        # 详细日志记录
-        LOG_FILE="system-deps-install.log"
-        echo "$(date): 开始安装系统依赖" > $LOG_FILE
-        
-        # 更新包管理器
-        echo "更新包管理器..."
-        echo "$(date): 更新包管理器" >> $LOG_FILE
-        sudo apt-get update -y >> $LOG_FILE 2>&1 || {
-          echo "错误: 包管理器更新失败，使用备用源..."
-          echo "$(date): 包管理器更新失败，使用备用源" >> $LOG_FILE
-          sudo sed -i 's/archive.ubuntu.com/mirrors.aliyun.com/g' /etc/apt/sources.list
-          sudo apt-get update -y >> $LOG_FILE 2>&1
-        }
-        
-        # 安装必要的系统依赖
-        echo "安装系统依赖..."
-        echo "$(date): 开始安装系统依赖包" >> $LOG_FILE
-        
-        # 定义依赖列表
-        DEPS=( 
-          python3-pip 
-          build-essential 
-          git 
-          ffmpeg 
-          libsdl2-dev 
-          libsdl2-image-dev 
-          libsdl2-mixer-dev 
-          libsdl2-ttf-dev 
-          libportmidi-dev 
-          libswscale-dev 
-          libavformat-dev 
-          libavcodec-dev 
-          zlib1g-dev 
-          libunwind-dev 
-          libgstreamer1.0-dev 
-          libgstreamer-plugins-base1.0-dev 
-          gstreamer1.0-plugins-base 
-          gstreamer1.0-plugins-good 
-          autoconf 
-          automake 
-          libtool 
-          pkg-config 
-          libffi-dev 
-          libssl-dev 
-          liblzma-dev 
-          openjdk-17-jdk 
-        )
-        
-        # 尝试安装依赖
-        sudo apt-get install -y --fix-missing "${DEPS[@]}" >> $LOG_FILE 2>&1 || {
-          echo "错误: 系统依赖安装失败"
-          echo "$(date): 系统依赖安装失败" >> $LOG_FILE
-          echo "请手动安装以下依赖:"
-          echo "${DEPS[*]}"
-          echo "详细错误信息请查看: $LOG_FILE"
-          exit 1
-        }
-        
-        # 验证依赖安装
-        echo "验证依赖安装..."
-        echo "$(date): 验证依赖安装" >> $LOG_FILE
-        for dep in "${DEPS[@]}"; do
-          if dpkg -s "$dep" > /dev/null 2>&1; then
-            echo "✓ $dep 已安装"
-            echo "$(date): $dep 已安装" >> $LOG_FILE
-          else
-            echo "✗ $dep 安装失败"
-            echo "$(date): $dep 安装失败" >> $LOG_FILE
-          fi
-        done
-        
-        echo "=== 系统依赖安装完成 ==="
-        echo "$(date): 系统依赖安装完成" >> $LOG_FILE
+        sudo apt-get update -y
+        sudo apt-get install -y python3-pip build-essential git ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base autoconf automake libtool pkg-config libffi-dev libssl-dev liblzma-dev openjdk-17-jdk
 
     - name: Set up Java 17
       uses: actions/setup-java@v4
       with:
-        java-version: '17.0.11'
+        java-version: '17'
         distribution: 'temurin'
 
     - name: Install Python dependencies
       run: |
-        echo "=== 开始安装 Python 依赖 ==="
-        
-        LOG_FILE="python-deps-install2.log"
-        echo "$(date): 开始安装 Python 依赖" > $LOG_FILE
-        
-        echo "升级 pip 和相关工具..."
-        echo "$(date): 升级 pip, setuptools 和 wheel" >> $LOG_FILE
-        pip install --upgrade pip setuptools wheel >> $LOG_FILE 2>&1 || {
-          echo "错误: 升级 pip 失败"
-          exit 1
-        }
-        
-        echo "安装 cython（兼容版本）..."
-        echo "$(date): 安装 cython" >> $LOG_FILE
-        pip install "cython<3.0.0" >> $LOG_FILE 2>&1 || {
-          echo "错误: 安装 cython 失败"
-          exit 1
-        }
-        
-        echo "安装 buildozer..."
-        echo "$(date): 安装 buildozer" >> $LOG_FILE
-        pip install buildozer==1.5.0 >> $LOG_FILE 2>&1 || {
-          echo "错误: 安装 buildozer 失败"
-          exit 1
-        }
-        
-        echo "安装 pyjnius（预编译版本）..."
-        echo "$(date): 安装 pyjnius" >> $LOG_FILE
-        pip install pyjnius >> $LOG_FILE 2>&1 || {
-          echo "警告: pyjnius 安装失败，将在构建时处理"
-        }
-        
-        if [ -f "requirements.txt" ]; then
-          echo "安装 requirements.txt 中的依赖..."
-          echo "$(date): 安装 requirements.txt 中的依赖" >> $LOG_FILE
-          pip install -r requirements.txt >> $LOG_FILE 2>&1 || {
-            echo "警告: 部分依赖安装失败"
-          }
-        fi
-        
-        echo "检查安装结果..."
-        pip list | grep -E "buildozer|cython|kivy|pillow|pyjnius|plyer"
-        
-        echo "=== Python 依赖安装完成 ==="
+        pip install --upgrade pip setuptools wheel
+        pip install "cython<3.0.0"
+        pip install buildozer==1.5.0
+        pip install "kivy[base]>=2.3.0"
+        pip install pillow plyer
 
-    - name: Setup Android SDK licenses
+    - name: Setup Android SDK
       run: |
         mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
         echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
         echo "84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
-        echo "d975f751698a77b662f1254ddbeed3901e976f5a" > ~/.buildozer/android/platform/android-sdk/licenses/intel-android-extra-license
+        mkdir -p android-sdk/cmdline-tools
+        cd android-sdk/cmdline-tools
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline.zip
+        unzip -q cmdline.zip
+        mv cmdline-tools latest
+        cd ../..
+        export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+        echo "y" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;android-33" "build-tools;33.0.0" || true
 
-    - name: Check project files
+    - name: Check project
       run: |
-        echo "=== Project Structure ==="
         ls -la
-        echo "=== Checking main.py ==="
-        python3 -m py_compile main.py && echo "✓ main.py syntax OK"
-        echo "=== Checking pet_mood.py ==="
-        python3 -m py_compile pet_mood.py && echo "✓ pet_mood.py syntax OK"
-        echo "=== Checking weather.py ==="
-        python3 -m py_compile weather.py && echo "✓ weather7.py syntax OK"
-        echo "=== Checking calendar_integration.py ==="
-        python3 -m py_compile calendar_integration.py && echo "✓ calendar_integration.py syntax OK"
-        echo "=== Checking icon.png ==="
-        ls -la icon.png || echo "WARNING: icon.png not found!"
-        echo "=== Checking buildozer.spec ==="
-        head -30 buildozer.spec
-
-    - name: Clean previous build
-      run: |
-        rm -rf bin/
-        rm -rf .buildozer/
-
-    - name: Pre-install Android SDK
-      run: |
-        # 详细日志记录
-        LOG_FILE="android-sdk-install.log"
-        echo "$(date): 开始安装 Android SDK" > $LOG_FILE
-        
-        # 创建必要的目录
-        echo "创建 Android SDK 目录..."
-        echo "$(date): 创建 Android SDK 目录" >> $LOG_FILE
-        mkdir -p ~/.buildozer/android/platform/
-        cd ~/.buildozer/android/platform/
-        
-        # 下载并安装 Android Command Line Tools
-        echo "下载 Android Command Line Tools..."
-        echo "$(date): 下载 Android Command Line Tools" >> $LOG_FILE
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip || {
-          echo "错误: 下载 Command Line Tools 失败"
-          echo "$(date): 下载 Command Line Tools 失败" >> $LOG_FILE
-          echo "请手动下载并安装: https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
-          exit 1
-        }
-        
-        unzip -q commandlinetools-linux-11076708_latest.zip || {
-          echo "错误: 解压 Command Line Tools 失败"
-          echo "$(date): 解压 Command Line Tools 失败" >> $LOG_FILE
-          echo "请手动解压到 ~/.buildozer/android/platform/ 目录"
-          exit 1
-        }
-        
-        # 配置 SDK 目录结构
-        echo "配置 SDK 目录结构..."
-        echo "$(date): 配置 SDK 目录结构" >> $LOG_FILE
-        mkdir -p android-sdk/cmdline-tools/latest
-        rm -rf android-sdk/cmdline-tools/latest/*
-        cp -r cmdline-tools/* android-sdk/cmdline-tools/latest/
-        rm -rf cmdline-tools
-        
-        # 创建 symlink 以兼容 Buildozer
-        mkdir -p android-sdk/tools/bin
-        ln -sf ../../cmdline-tools/latest/bin/sdkmanager android-sdk/tools/bin/sdkmanager
-        
-        # 设置环境变量
-        export ANDROID_SDK_ROOT=$(pwd)/android-sdk
-        export PATH=$PATH:${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin:${ANDROID_SDK_ROOT}/platform-tools
-        
-        # 更新 SDK 管理器
-        echo "更新 SDK 管理器..."
-        echo "$(date): 更新 SDK 管理器" >> $LOG_FILE
-        # 使用echo代替yes命令，避免管道错误
-        echo "y" | android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=${ANDROID_SDK_ROOT} --update >> $LOG_FILE 2>&1 || {
-          echo "错误: 更新 SDK 管理器失败"
-          echo "$(date): 更新 SDK 管理器失败" >> $LOG_FILE
-          exit 1
-        }
-        
-        # 接受许可证并安装必要的组件
-        echo "接受许可证并安装必要的组件..."
-        echo "$(date): 接受许可证并安装组件" >> $LOG_FILE
-        # 使用echo代替yes命令，避免管道错误
-        echo "y" | android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=${ANDROID_SDK_ROOT} --licenses >> $LOG_FILE 2>&1
-        echo "y" | android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=${ANDROID_SDK_ROOT} "platform-tools" "platforms;android-33" "build-tools;33.0.0" >> $LOG_FILE 2>&1 || {
-          echo "错误: 安装 SDK 组件失败"
-          echo "$(date): 安装 SDK 组件失败" >> $LOG_FILE
-          exit 1
-        }
-        
-        # 下载并安装 NDK
-        echo "下载并安装 NDK..."
-        echo "$(date): 下载并安装 NDK" >> $LOG_FILE
-        # 先删除已存在的NDK目录，避免解压时的交互式确认
-        rm -rf android-ndk-r25b 2>/dev/null
-        wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip || {
-          echo "错误: 下载 NDK 失败"
-          echo "$(date): 下载 NDK 失败" >> $LOG_FILE
-          echo "请手动下载并安装: https://dl.google.com/android/repository/android-ndk-r25b-linux.zip"
-          exit 1
-        }
-        
-        # 使用-o参数自动覆盖已存在的文件
-        unzip -oq android-ndk-r25b-linux.zip || {
-          echo "错误: 解压 NDK 失败"
-          echo "$(date): 解压 NDK 失败" >> $LOG_FILE
-          echo "请手动解压到 ~/.buildozer/android/platform/ 目录"
-          exit 1
-        }
-        
-        # 验证安装
-        echo "验证安装..."
-        echo "$(date): 验证安装" >> $LOG_FILE
-        ls -la >> $LOG_FILE
-        
-        # 检查关键组件是否安装成功
-        if [ -d "android-sdk/platform-tools" ]; then
-          echo "✓ platform-tools 已安装"
-          echo "$(date): platform-tools 已安装" >> $LOG_FILE
-        else
-          echo "✗ platform-tools 安装失败"
-          echo "$(date): platform-tools 安装失败" >> $LOG_FILE
-        fi
-        
-        if [ -d "android-ndk-r25b" ]; then
-          echo "✓ NDK 已安装"
-          echo "$(date): NDK 已安装" >> $LOG_FILE
-        else
-          echo "✗ NDK 安装失败"
-          echo "$(date): NDK 安装失败" >> $LOG_FILE
-        fi
-        
-        echo "=== Android SDK 安装完成 ==="
-        echo "$(date): Android SDK 安装完成" >> $LOG_FILE
+        python3 -m py_compile main.py
+        head -20 buildozer.spec
 
     - name: Build APK
       run: |
-        # 详细日志记录
-        LOG_FILE="build-apk.log"
-        echo "$(date): 开始构建 APK" > $LOG_FILE
-        
-        # 设置环境变量
         export BUILDOZER_WARN_ON_ROOT=0
-        export CYTHON_FORCE_NO_DOCSTRINGS=1
-        
-        echo "设置构建环境..."
-        echo "$(date): 设置构建环境" >> $LOG_FILE
-        
-        # 清理之前的构建产物
-        echo "清理之前的构建产物..."
-        echo "$(date): 清理构建产物" >> $LOG_FILE
-        rm -rf bin/ 2>/dev/null
-        
-        # 执行构建
-        echo "执行 Buildozer 构建..."
-        echo "$(date): 开始执行 Buildozer 构建" >> $LOG_FILE
-        # 构建 APK（pyjnius 已在 buildozer.spec 中排除）
-        buildozer android debug --ignore-setup-py >> $LOG_FILE 2>&1 || {
-          echo "错误: 构建过程失败"
-          echo "$(date): 构建过程失败" >> $LOG_FILE
-          # 显示关键错误信息（只显示最后20行错误）
-          echo "=== 构建错误详情 ==="
-          grep -E "error|Error|ERROR|failed|Failed|FAILED" $LOG_FILE | tail -20
-          exit 1
-        }
-        
-        # 显示构建日志的最后部分，便于调试（只显示最后30行）
-        echo "=== 构建日志摘要 ==="
-        tail -30 $LOG_FILE
-        
-        # 检查构建是否成功
-        echo "检查构建结果..."
-        echo "$(date): 检查构建结果" >> $LOG_FILE
-        if ls bin/*.apk 1> /dev/null 2>&1; then
-          echo "✓ 构建成功！"
-          echo "$(date): 构建成功" >> $LOG_FILE
-          ls -la bin/
-          exit 0
+        buildozer android debug --ignore-setup-py 2>&1 | tee build.log
+      timeout-minutes: 60
+
+    - name: Check result
+      run: |
+        echo "=== Build logs ==="
+        tail -50 build.log
+        echo "=== Checking APK ==="
+        ls -la bin/ 2>/dev/null || echo "No APK found"
+        if [ -f "bin/"*.apk ]; then
+          echo "APK build SUCCESS"
         else
-          echo "✗ 构建失败！"
-          echo "$(date): 构建失败" >> $LOG_FILE
-          # 检查是否有错误日志
-          if [ -f ".buildozer/android/platform/build/build/outputs/logs/"*.txt ]; then
-            echo "=== 构建工具错误日志 ==="
-            cat .buildozer/android/platform/build/build/outputs/logs/*.txt
-          fi
+          echo "APK build FAILED"
           exit 1
         fi
-      timeout-minutes: 90
-
-    - name: Check build output
-      if: always()
-      run: |
-        echo "=== Checking bin directory ==="
-        ls -la bin/ 2>/dev/null || echo "bin/ directory not found"
-        echo "=== Checking .buildozer directory ==="
-        ls -la .buildozer/ 2>/dev/null || echo ".buildozer/ directory not found"
 
     - name: Upload APK
       if: success()
@@ -372,61 +83,10 @@ jobs:
       with:
         name: clock2-apk
         path: bin/*.apk
-        if-no-files-found: error
 
     - name: Upload Build Logs
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: build-logs
-        path: |
-          build-apk.log
-          system-deps-install.log
-          python-deps-install.log
-          android-sdk-install.log
-        if-no-files-found: warn
-
-    - name: Create Release
-      if: success() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-      uses: softprops/action-gh-release@v2.0.4
-      with:
-        files: bin/*.apk
-        tag_name: v3.0.${{ github.run_number }}
-        name: Clock2 Android APK v3.0.${{ github.run_number }}
-        body: |
-          ## Clock2 Android APK - Bug修复版本
-
-          ### Version Info
-          - Version: v3.0.${{ github.run_number }}
-          - Status: All bugs fixed + 3 new features implemented
-          - Features: Desktop pet alarm clock with mood, weather and calendar integration
-
-          ### Bug修复清单
-          ✅ 天气API系统bug（支持模拟数据）
-          ✅ 宠物心情动画bug（添加4个动画方法）
-          ✅ 日历命名冲突bug（更名为calendar_integration.py）
-          ✅ 数据类型bug（温度值转换）
-          ✅ 示例数据bug（键名修正）
-
-          ### 新增功能
-          ✅ 宠物心情系统（根据时间、互动、天气、日历事件自动计算心情）
-          ✅ 天气显示（OpenWeatherMap API集成，支持模拟数据）
-          ✅ 日历集成（日历事件管理，闹钟与日历事件关联）
-
-          ### Installation
-          1. Download APK file
-          2. Install on Android device
-          3. Grant overlay permission
-
-          ### Features
-          - Floating pet
-          - Smart alarm system
-          - Countdown timer
-          - Snooze mode
-          - Vibration alert
-          - Sound alert
-          - Pet mood system (new!)
-          - Weather display (new!)
-          - Calendar integration (new!)
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        path: build.log
