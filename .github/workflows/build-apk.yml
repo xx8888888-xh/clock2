@@ -56,11 +56,33 @@ jobs:
         mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
         echo -e "24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
 
+    - name: Check build environment
+      run: |
+        echo "=== Build Environment ==="
+        echo "Python version:"
+        python3 --version
+        echo "Java version:"
+        java -version 2>&1
+        echo "Buildozer installed:"
+        pip show buildozer
+        echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
+        echo "ANDROID_HOME: $ANDROID_HOME"
+
     - name: Build APK
       env:
         BUILDOZER_WARN_ON_ROOT: '0'
+        BUILDOZER_VERBOSE: '1'
       run: |
-        buildozer android debug 2>&1
+        echo "=== Starting Build ==="
+        ls -la
+        echo "=== Project files ==="
+        ls -la *.py *.spec 2>/dev/null || true
+        echo "=== Buildozer version ==="
+        buildozer version || true
+        echo "=== Build APK ==="
+        buildozer android debug 2>&1 | tee build.log
+        echo "=== Build result ==="
+        tail -100 build.log
       timeout-minutes: 60
 
     - name: Upload APK
@@ -69,3 +91,10 @@ jobs:
       with:
         name: clock2-apk
         path: bin/*.apk
+
+    - name: Upload Build Logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs
+        path: build.log
