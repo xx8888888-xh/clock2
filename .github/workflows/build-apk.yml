@@ -60,27 +60,33 @@ jobs:
       env:
         BUILDOZER_WARN_ON_ROOT: '0'
       run: |
-        echo "=== Build Environment ==="
+        set -x
+        echo "=== STEP 1: Environment Check ==="
+        pwd
+        ls -la
         python3 --version
-        java -version 2>&1
-        buildozer version || true
+        java -version 2>&1 || true
+        which buildozer
+        buildozer --version || true
         
-        echo "=== Cleaning previous builds ==="
+        echo "=== STEP 2: Clean ==="
         rm -rf bin/ .buildozer/
+        mkdir -p bin/
         
-        echo "=== Starting buildozer build ==="
-        buildozer android debug 2>&1
+        echo "=== STEP 3: Build ==="
+        buildozer android debug || true
         
-        echo "=== Checking for APK ==="
-        ls -la bin/ 2>/dev/null || echo "No bin/ directory"
-        find . -name "*.apk" -type f 2>/dev/null || echo "No APK found"
+        echo "=== STEP 4: Check Results ==="
+        find . -name "*.apk" -type f 2>/dev/null
+        ls -la bin/ 2>/dev/null || echo "No bin/"
+        ls -la .buildozer/ 2>/dev/null || echo "No .buildozer/"
         
-        if [ -f "bin/"*.apk ]; then
-          echo "=== APK Found ==="
+        echo "=== STEP 5: Final APK Check ==="
+        if ls bin/*.apk 1>/dev/null 2>&1; then
+          echo "APK found:"
           ls -la bin/*.apk
-          echo "SUCCESS: APK generated"
         else
-          echo "ERROR: No APK generated"
+          echo "No APK found in bin/"
           exit 1
         fi
       timeout-minutes: 60
@@ -90,10 +96,3 @@ jobs:
       with:
         name: clock2-apk
         path: bin/*.apk
-
-    - name: Upload Build Logs
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-logs
-        path: build.log
