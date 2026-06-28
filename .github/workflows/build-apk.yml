@@ -24,7 +24,7 @@ jobs:
         path: |
           /var/cache/apt
           /var/lib/apt
-        key: ${{ runner.os }}-apt-v1-${{ hashFiles('.github/workflows/build-apk.yml') }}
+        key: ${{ runner.os }}-apt-v2-${{ hashFiles('.github/workflows/build-apk.yml') }}
         restore-keys: |
           ${{ runner.os }}-apt-
 
@@ -75,39 +75,56 @@ jobs:
         yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;android-33" "build-tools;33.0.0" || true
         
         echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+        echo "PATH=$PATH" >> $GITHUB_ENV
 
     - name: Build APK
       env:
         BUILDOZER_WARN_ON_ROOT: '0'
-        ANDROID_SDK_ROOT: ~/.buildozer/android/platform/android-sdk
       run: |
+        set -x
+        
         export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
         export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
         
-        echo "=== Build Environment ==="
+        echo "=== Environment Check ==="
         echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
-        ls -la $ANDROID_SDK_ROOT/
+        echo "PATH: $PATH"
+        python3 --version
+        java -version 2>&1 || true
+        which python3
+        
+        echo "=== Checking SDK ==="
+        ls -la $ANDROID_SDK_ROOT/ 2>/dev/null || echo "SDK not found"
+        ls -la $ANDROID_SDK_ROOT/platform-tools/ 2>/dev/null || echo "No platform-tools"
+        ls -la $ANDROID_SDK_ROOT/licenses/ 2>/dev/null || echo "No licenses"
         
         echo "=== Cleaning ==="
         rm -rf bin/ .buildozer/
         mkdir -p bin/
         
-        echo "=== Build ==="
-        buildozer android debug 2>&1
+        echo "=== Build Command ==="
+        timeout 55 buildozer android debug 2>&1 || BUILD_EXIT_CODE=$?
+        echo "Build exit code: $BUILD_EXIT_CODE"
+        
+        echo "=== Check bin/ ==="
+        ls -la bin/ 2>/dev/null || echo "No bin/"
         
         echo "=== Check APK ==="
-        if ls bin/*.apk 1>/dev/null 2>&1; then
+        APK_COUNT=$(ls bin/*.apk 2>/dev/null | wc -l)
+        echo "APK count: $APK_COUNT"
+        
+        if [ "$APK_COUNT" -gt 0 ]; then
           echo "APK found:"
           ls -la bin/*.apk
         else
           echo "ERROR: No APK found"
-          ls -la bin/ || echo "No bin/"
           find . -name "*.apk" -type f 2>/dev/null || echo "No APK anywhere"
           exit 1
         fi
       timeout-minutes: 60
 
     - name: Upload APK
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: clock2-apk
