@@ -19,6 +19,8 @@ jobs:
 
     - name: Install system dependencies
       run: |
+        # 使用清华镜像
+        sudo sed -i 's/archive.ubuntu.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list
         sudo apt-get update -qq
         sudo apt-get install -y -qq python3-pip build-essential git ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base autoconf automake libtool pkg-config libffi-dev libssl-dev liblzma-dev openjdk-17-jdk
 
@@ -30,11 +32,11 @@ jobs:
 
     - name: Install Python dependencies
       run: |
-        pip install --upgrade pip setuptools wheel
-        pip install cython==0.29.36
-        pip install buildozer
-        pip install kivy==2.3.0
-        pip install pillow plyer
+        pip install --upgrade pip setuptools wheel -i https://pypi.tuna.tsinghua.edu.cn/simple
+        pip install cython==0.29.36 -i https://pypi.tuna.tsinghua.edu.cn/simple
+        pip install buildozer -i https://pypi.tuna.tsinghua.edu.cn/simple
+        pip install kivy==2.3.0 -i https://pypi.tuna.tsinghua.edu.cn/simple
+        pip install pillow plyer -i https://pypi.tuna.tsinghua.edu.cn/simple
 
     - name: Setup Android SDK licenses
       run: |
