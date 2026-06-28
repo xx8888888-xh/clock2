@@ -56,37 +56,36 @@ jobs:
         mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
         echo -e "24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
 
-    - name: Check build environment
-      run: |
-        echo "=== Build Environment ==="
-        echo "Python version:"
-        python3 --version
-        echo "Java version:"
-        java -version 2>&1
-        echo "Buildozer installed:"
-        pip show buildozer
-        echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
-        echo "ANDROID_HOME: $ANDROID_HOME"
-
     - name: Build APK
       env:
         BUILDOZER_WARN_ON_ROOT: '0'
-        BUILDOZER_VERBOSE: '1'
       run: |
-        echo "=== Starting Build ==="
-        ls -la
-        echo "=== Project files ==="
-        ls -la *.py *.spec 2>/dev/null || true
-        echo "=== Buildozer version ==="
+        echo "=== Build Environment ==="
+        python3 --version
+        java -version 2>&1
         buildozer version || true
-        echo "=== Build APK ==="
-        buildozer android debug 2>&1 | tee build.log
-        echo "=== Build result ==="
-        tail -100 build.log
+        
+        echo "=== Cleaning previous builds ==="
+        rm -rf bin/ .buildozer/
+        
+        echo "=== Starting buildozer build ==="
+        buildozer android debug 2>&1
+        
+        echo "=== Checking for APK ==="
+        ls -la bin/ 2>/dev/null || echo "No bin/ directory"
+        find . -name "*.apk" -type f 2>/dev/null || echo "No APK found"
+        
+        if [ -f "bin/"*.apk ]; then
+          echo "=== APK Found ==="
+          ls -la bin/*.apk
+          echo "SUCCESS: APK generated"
+        else
+          echo "ERROR: No APK generated"
+          exit 1
+        fi
       timeout-minutes: 60
 
     - name: Upload APK
-      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: clock2-apk
