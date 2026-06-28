@@ -8,8 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    permissions:
-      contents: write
 
     steps:
     - uses: actions/checkout@v4
@@ -21,7 +19,7 @@ jobs:
 
     - name: Install system dependencies
       run: |
-        sudo apt-get update -y
+        sudo apt-get update
         sudo apt-get install -y python3-pip build-essential git ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base autoconf automake libtool pkg-config libffi-dev libssl-dev liblzma-dev openjdk-17-jdk
 
     - name: Set up Java 17
@@ -33,49 +31,22 @@ jobs:
     - name: Install Python dependencies
       run: |
         pip install --upgrade pip setuptools wheel
-        pip install "cython<3.0.0"
-        pip install buildozer==1.5.0
-        pip install "kivy[base]>=2.3.0"
+        pip install cython==0.29.36
+        pip install buildozer
+        pip install kivy==2.3.0
         pip install pillow plyer
 
-    - name: Setup Android SDK
+    - name: Setup Android SDK licenses
       run: |
         mkdir -p ~/.buildozer/android/platform/android-sdk/licenses
-        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-        echo "84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
-        mkdir -p android-sdk/cmdline-tools
-        cd android-sdk/cmdline-tools
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline.zip
-        unzip -q cmdline.zip
-        mv cmdline-tools latest
-        cd ../..
-        export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
-        echo "y" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;android-33" "build-tools;33.0.0" || true
-
-    - name: Check project
-      run: |
-        ls -la
-        python3 -m py_compile main.py
-        head -20 buildozer.spec
+        echo -e "24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd" > ~/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
 
     - name: Build APK
+      env:
+        BUILDOZER_WARN_ON_ROOT: '0'
       run: |
-        export BUILDOZER_WARN_ON_ROOT=0
-        buildozer android debug --ignore-setup-py 2>&1 | tee build.log
+        buildozer android debug 2>&1
       timeout-minutes: 60
-
-    - name: Check result
-      run: |
-        echo "=== Build logs ==="
-        tail -50 build.log
-        echo "=== Checking APK ==="
-        ls -la bin/ 2>/dev/null || echo "No APK found"
-        if [ -f "bin/"*.apk ]; then
-          echo "APK build SUCCESS"
-        else
-          echo "APK build FAILED"
-          exit 1
-        fi
 
     - name: Upload APK
       if: success()
@@ -83,10 +54,3 @@ jobs:
       with:
         name: clock2-apk
         path: bin/*.apk
-
-    - name: Upload Build Logs
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-logs
-        path: build.log
