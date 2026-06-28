@@ -4,8 +4,7 @@
 """
 
 import os
-import sys
-import subprocess
+import re
 
 def check_dependencies():
     """检查必要的Python依赖"""
@@ -15,11 +14,7 @@ def check_dependencies():
         'kivy',
         'plyer',
         'requests',
-        'PIL',
-        'datetime',
-        'json',
-        'gc',
-        'time'
+        'Pillow',
     ]
     
     missing_modules = []
@@ -71,35 +66,43 @@ def check_files():
 def check_android_permission_code():
     """检查Android权限代码"""
     print("\n检查Android权限代码...")
-    
+
+    if not os.path.exists('main.py'):
+        print("❌ main.py 不存在，跳过检查")
+        return False
+
     with open('main.py', 'r', encoding='utf-8') as f:
         content = f.read()
-    
+
     checks = {
-        'android权限导入': 'from android.permissions import Permission, request_permission',
-        '权限检查': 'check_permission(Permission.SYSTEM_ALERT_WINDOW)',
-        '权限请求': 'request_permission(Permission.SYSTEM_ALERT_WINDOW',
-        '导入错误处理': 'except ImportError',
-        '平台检测': 'from kivy.utils import platform',
+        'android权限导入': re.compile(r'from android\.permissions import (Permission|request_permission)'),
+        '权限检查': re.compile(r'check_permission\s*\(\s*Permission\.SYSTEM_ALERT_WINDOW\s*\)'),
+        '权限请求': re.compile(r'request_permission\s*\(\s*Permission\.SYSTEM_ALERT_WINDOW'),
+        '导入错误处理': re.compile(r'except\s+ImportError'),
+        '平台检测': re.compile(r'from kivy\.utils import platform'),
     }
-    
+
     all_pass = True
-    for check_name, check_text in checks.items():
-        if check_text in content:
+    for check_name, pattern in checks.items():
+        if pattern.search(content):
             print(f"✅ {check_name}")
         else:
             print(f"❌ {check_name}")
             all_pass = False
-    
+
     return all_pass
 
 def check_buildozer_config():
     """检查buildozer配置"""
     print("\n检查buildozer.spec配置...")
-    
+
+    if not os.path.exists('buildozer.spec'):
+        print("❌ buildozer.spec 不存在，跳过检查")
+        return False
+
     with open('buildozer.spec', 'r', encoding='utf-8') as f:
         content = f.read()
-    
+
     checks = {
         'SYSTEM_ALERT_WINDOW权限': 'SYSTEM_ALERT_WINDOW',
         'INTERNET权限': 'INTERNET',
@@ -111,7 +114,7 @@ def check_buildozer_config():
         '主程序文件': 'source.main = main.py',
         '应用图标': 'icon.filename = icon.png',
     }
-    
+
     all_pass = True
     for check_name, check_text in checks.items():
         if check_text in content:
@@ -119,26 +122,30 @@ def check_buildozer_config():
         else:
             print(f"❌ {check_name}")
             all_pass = False
-    
+
     return all_pass
 
 def check_calendar_fix():
     """检查calendar_integration.py修复"""
     print("\n检查calendar_integration.py修复...")
-    
+
+    if not os.path.exists('calendar_integration.py'):
+        print("❌ calendar_integration.py 不存在，跳过检查")
+        return False
+
     with open('calendar_integration.py', 'r', encoding='utf-8') as f:
         content = f.read()
-    
-    # 检查是否有check_overdue_events2函数
-    if 'def check_overdue_events2(self):' in content:
+
+    # 检查是否有check_overdue_events2函数（未修复的旧版本）
+    if re.search(r'def\s+check_overdue_events2\s*\(', content):
         print("❌ 还有未修复的check_overdue_events2函数")
         return False
-    
+
     # 检查是否有check_overdue_events函数
-    if 'def check_overdue_events(self):' in content:
+    if re.search(r'def\s+check_overdue_events\s*\(', content):
         print("✅ check_overdue_events函数存在")
         # 检查逻辑是否正确
-        if 'new_events = []' in content and 'self.events = new_events' in content:
+        if re.search(r'new_events\s*=\s*\[\]', content) and re.search(r'self\.events\s*=\s*new_events', content):
             print("✅ 逻辑修复正确")
             return True
         else:
@@ -151,27 +158,33 @@ def check_calendar_fix():
 def check_kivy_simulation():
     """模拟Kivy运行环境检查"""
     print("\n模拟Kivy环境检查...")
-    
+
     try:
         # 测试不依赖Kivy的模块
         from pet_mood import PetMoodSystem
         from weather import WeatherAPI
         from calendar_integration import CalendarIntegration
-        
+
         print("✅ pet_mood模块可导入")
         print("✅ weather模块可导入")
         print("✅ calendar_integration模块可导入")
-        
+
         # 测试功能
         mood_system = PetMoodSystem()
         weather_api = WeatherAPI()
         calendar = CalendarIntegration()
-        
+
         print("✅ 宠物心情系统初始化")
         print("✅ 天气系统初始化")
         print("✅ 日历系统初始化")
-        
+
         return True
+    except ImportError as e:
+        print(f"❌ 模块导入失败: {e}")
+        return False
+    except SyntaxError as e:
+        print(f"❌ 语法错误: {e}")
+        return False
     except Exception as e:
         print(f"❌ Kivy模拟环境检查失败: {e}")
         return False

@@ -4,6 +4,7 @@
 """
 
 import os
+import re
 from datetime import datetime, timedelta
 
 # 默认宠物图片路径
@@ -63,7 +64,7 @@ FONTS = {
 # 测试闹钟数据
 TEST_ALARMS = [
     {
-        'id': 0,
+        'id': 1,
         'hour': 8,
         'minute': 0,
         'label': '起床',
@@ -72,7 +73,7 @@ TEST_ALARMS = [
         'enabled': True
     },
     {
-        'id': 1,
+        'id': 2,
         'hour': 12,
         'minute': 0,
         'label': '午餐',
@@ -207,21 +208,36 @@ def get_next_alarm_time_text(alarm):
     )
     
     if alarm_time < now:
-        alarm_time = alarm_time.replace(day=now.day + 1)
+        try:
+            alarm_time = alarm_time.replace(day=now.day + 1)
+        except ValueError:
+            # 月份边界处理：如果day+1无效（如月末），使用下月第一天
+            if now.month == 12:
+                alarm_time = alarm_time.replace(year=now.year + 1, month=1, day=1)
+            else:
+                alarm_time = alarm_time.replace(month=now.month + 1, day=1)
     
     # 处理重复设置
     if alarm.get('repeat_days'):
-        while alarm_time.weekday() not in alarm['repeat_days']:
+        while alarm_time.weekday() not in alarm['repeat_days'] or alarm_time <= now:
             alarm_time += timedelta(days=1)
+            # 月份边界保护
+            if alarm_time.day == 1 and alarm_time.hour == alarm['hour'] and alarm_time.minute == alarm['minute']:
+                break
     
     time_diff = alarm_time - now
-    hours = time_diff.seconds // 3600
-    minutes = (time_diff.seconds % 3600) // 60
+    total_seconds = time_diff.days * 86400 + time_diff.seconds
+    hours = (total_seconds % 86400) // 3600
+    minutes = (total_seconds % 3600) // 60
+    
+    days_text = f"{time_diff.days}天" if time_diff.days > 0 else ""
+    hours_text = f"{hours}小时" if hours > 0 else ""
+    minutes_text = f"{minutes}分钟" if minutes > 0 else ""
     
     if time_diff.days > 0:
-        return f"{time_diff.days}天{hours}小时后"
+        return f"{time_diff.days}天{hours}小时后" if hours > 0 else f"{time_diff.days}天后"
     elif hours > 0:
-        return f"{hours}小时{minutes}分钟后"
+        return f"{hours}小时{minutes}分钟后" if minutes > 0 else f"{hours}小时后"
     else:
         return f"{minutes}分钟后"
 
@@ -296,15 +312,22 @@ def get_time_until_alarm(alarm):
 
 def format_time_delta(td):
     """格式化时间差"""
-    if td.days > 0:
-        return f"{td.days}天{td.seconds // 3600}小时{(td.seconds % 3600) // 60}分钟"
+    total_seconds = td.days * 86400 + td.seconds
+    days = total_seconds // 86400
+    hours = (total_seconds % 86400) // 3600
+    minutes = (total_seconds % 3600) // 60
+    
+    days_text = f"{days}天" if days > 0 else ""
+    hours_text = f"{hours}小时" if hours > 0 else ""
+    minutes_text = f"{minutes}分钟" if minutes > 0 else ""
+    
+    if days > 0:
+        # 跨天时小时需要取模，同时处理 minutes=0 的情况
+        return f"{days}天{hours}小时{minutes_text}" if minutes > 0 else f"{days}天{hours}小时"
+    elif hours > 0:
+        return f"{hours}小时{minutes_text}" if minutes > 0 else f"{hours}小时"
     else:
-        hours = td.seconds // 3600
-        minutes = (td.seconds % 3600) // 60
-        if hours > 0:
-            return f"{hours}小时{minutes}分钟"
-        else:
-            return f"{minutes}分钟"
+        return f"{minutes}分钟"
 
 
 def parse_time_string(time_str):
@@ -342,13 +365,6 @@ def get_pet_emotion(hour):
         return 'relaxed', '晚上好！放松一下吧！'
     else:
         return 'sleepy', '该睡觉了，晚安！'
-
-
-# 导入re模块用于正则表达式
-try:
-    import re
-except ImportError:
-    pass
 
 
 if __name__ == '__main__':

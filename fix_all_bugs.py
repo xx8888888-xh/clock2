@@ -3,8 +3,6 @@
 修复clock2项目中所有发现的bug
 """
 
-import os
-import sys
 import re
 
 def fix_calendar_integration():
@@ -94,7 +92,7 @@ def add_android_permission_code():
             content = f.read()
         
         # 在App类的build方法中添加Android权限代码
-        build_method_pattern = r'def build\(self\):'
+        build_method_pattern = 'def build(self):'
         if build_method_pattern in content:
             # 找到build方法
             lines = content.split('\n')
@@ -106,7 +104,7 @@ def add_android_permission_code():
                     # 在build方法中添加Android权限代码
                     new_lines.append('        # Android悬浮窗权限检查')
                     new_lines.append('        from kivy.utils import platform')
-                    new_lines.append('        if platform == \"android\":')
+                    new_lines.append('        if platform == "android":')
                     new_lines.append('            from android.permissions import Permission, request_permission')
                     new_lines.append('            from android.permissions import check_permission')
                     new_lines.append('            ')
@@ -115,24 +113,30 @@ def add_android_permission_code():
                     new_lines.append('            if not has_permission:')
                     new_lines.append('                def callback(permissions, results):')
                     new_lines.append('                    if all(results):')
-                    new_lines.append('                        print(\"悬浮窗权限已授予\")')
+                    new_lines.append('                        print("悬浮窗权限已授予")')
                     new_lines.append('                    else:')
-                    new_lines.append('                        print(\"悬浮窗权限被拒绝，应用可能无法正常运行\")')
+                    new_lines.append('                        print("悬浮窗权限被拒绝，应用可能无法正常运行")')
                     new_lines.append('                ')
-                    new_lines.append('                # 请求悬浮窗权限')
+                    new_lines.append('                # 请求悬浮窗权限（异步操作，callback会在权限结果返回后被调用）')
                     new_lines.append('                request_permission(Permission.SYSTEM_ALERT_WINDOW, callback)')
                     new_lines.append('            else:')
-                    new_lines.append('                print(\"已拥有悬浮窗权限\")')
+                    new_lines.append('                print("已拥有悬浮窗权限")')
                     new_lines.append('        ')
                     
-                    # 继续后面的代码
-                    for j in range(i+1, len(lines)):
-                        if lines[j].strip() == '        self.pet = CutePet()':
-                            new_lines.append(lines[j])
+                    # 跳过原build方法体，直到找到同级或更外层的代码
+                    build_indent = len(lines[i]) - len(lines[i].lstrip())
+                    skip_until = None
+                    for j in range(i + 1, len(lines)):
+                        if lines[j].strip() == '':
+                            continue
+                        current_indent = len(lines[j]) - len(lines[j].lstrip())
+                        if current_indent <= build_indent:
+                            skip_until = j
                             break
-                        new_lines.append(lines[j])
-                        
-                    # 跳过重复添加的部分
+                    # 添加build方法之后的剩余内容
+                    if skip_until is not None:
+                        for k in range(skip_until, len(lines)):
+                            new_lines.append(lines[k])
                     break
             
             new_content = '\n'.join(new_lines)
@@ -190,36 +194,36 @@ def fix_weather_api():
         else:
             print("❌ weather.py缺少get_weather_for_pet方法")
             
-            # 添加get_weather_for_pet方法
-            weather_class_end = r'class WeatherAPI:'
-            if weather_class_end in content:
+            # 添加get_weather_for_pet方法 - 找到WeatherAPI类末尾添加
+            if 'class WeatherAPI:' in content:
                 lines = content.split('\n')
                 new_lines = []
                 
                 for i, line in enumerate(lines):
                     new_lines.append(line)
                     if line.strip() == 'class WeatherAPI:':
-                        # 找到类定义结束位置（通常是最后一个方法之后）
+                        # 找到类定义结束位置（下一个类或文件末尾）
                         for j in range(i, len(lines)):
-                            if lines[j].strip().startswith('def get_weather_for_pet(self):'):
-                                # 已经存在
-                                print("✅ 方法已存在")
-                                break
-                            if lines[j].strip() == '' and j > i + 50:
-                                # 在类末尾添加方法
+                            if lines[j].strip().startswith('class ') and j > i:
+                                # 在类定义前添加方法
                                 new_lines.append('    def get_weather_for_pet(self):')
-                                new_lines.append('        \"\"\"获取宠物友好的天气信息\"\"\"')
+                                new_lines.append('        """获取宠物友好的天气信息"""')
                                 new_lines.append('        weather = self.get_current_weather()')
                                 new_lines.append('        pet_weather_data = {')
-                                new_lines.append('            \'emoji\': self._get_weather_emoji(weather[\'description\']),')
-                                new_lines.append('            \'temp\': f\"{int(weather[\'temp\'])}°C\",')
-                                new_lines.append('            \'description\': weather[\'description\'],')
-                                new_lines.append('            \'impact\': weather[\'impact\'],')
-                                new_lines.append('            \'suggestion\': self._get_weather_suggestion(weather[\'impact\'])')
+                                new_lines.append("            'emoji': self._get_weather_emoji(weather['description']),")
+                                new_lines.append("            'temp': f\"{int(weather['temp'])}°C\",")
+                                new_lines.append("            'description': weather['description'],")
+                                new_lines.append("            'impact': weather['impact'],")
+                                new_lines.append("            'suggestion': self._get_weather_suggestion(weather['impact'])")
                                 new_lines.append('        }')
                                 new_lines.append('        return pet_weather_data')
+                                new_lines.append('')
                                 print("✅ 添加了get_weather_for_pet方法")
                                 break
+                
+                content = '\n'.join(new_lines)
+                with open('weather.py', 'w', encoding='utf-8') as f:
+                    f.write(content)
         
     except Exception as e:
         print(f"❌ 修复weather.py失败: {e}")
@@ -277,9 +281,9 @@ def add_startup_error_handling():
                     # 添加try-catch块
                     new_lines.append('        try:')
                     new_lines.append('            from kivy.utils import platform')
-                    new_lines.append('            print(f\"平台: {platform}\")')
+                    new_lines.append('            print(f"平台: {platform}")')
                     new_lines.append('        except Exception as e:')
-                    new_lines.append('            print(f\"平台检测失败: {e}\")')
+                    new_lines.append('            print(f"平台检测失败: {e}")')
                     break
             
             # 替换原来的代码

@@ -1,18 +1,17 @@
-import sys
 import ast
-import os
 
 files = ['main.py', 'resources.py', 'pet_mood.py', 'weather.py', 'calendar_integration.py']
 
-for file in files:
+for filepath in files:
     try:
-        with open(file, 'r', encoding='utf-8') as f:
+        with open(filepath, 'r', encoding='utf-8') as f:
             content = f.read()
         ast.parse(content)
-        print(f'{file}: OK')
+        print(f'{filepath}: OK')
     except SyntaxError as e:
-        print(f'{file}: SyntaxError at line {e.lineno}: {e.text}')
+        text = e.text.strip() if e.text else "<无法获取错误行内容>"
+        print(f'{filepath}: SyntaxError at line {e.lineno}: {text}')
     except FileNotFoundError:
-        print(f'{file}: File not found')
+        print(f'{filepath}: File not found')
     except Exception as e:
-        print(f'{file}: Error: {e}')
+        print(f'{filepath}: Error: {e}')
