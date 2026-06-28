@@ -17,26 +17,10 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install dependencies step 1
+    - name: Install system dependencies
       run: |
         sudo apt-get update -qq
-        sudo apt-get install -y -qq python3-pip build-essential git
-
-    - name: Install dependencies step 2
-      run: |
-        sudo apt-get install -y -qq ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev
-
-    - name: Install dependencies step 3
-      run: |
-        sudo apt-get install -y -qq libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev
-
-    - name: Install dependencies step 4
-      run: |
-        sudo apt-get install -y -qq libgstreamer1.0-dev gstreamer1.0-plugins-base autoconf automake libtool pkg-config
-
-    - name: Install dependencies step 5
-      run: |
-        sudo apt-get install -y -qq libffi-dev libssl-dev liblzma-dev openjdk-17-jdk
+        sudo apt-get install -y -qq python3-pip build-essential git ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base autoconf automake libtool pkg-config libffi-dev libssl-dev liblzma-dev openjdk-17-jdk
 
     - name: Set up Java 17
       uses: actions/setup-java@v4
