@@ -64,7 +64,8 @@ jobs:
         
         # Set environment
         export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
-        export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
+        mkdir -p $ANDROID_SDK_ROOT
+        cd $ANDROID_SDK_ROOT
         
         # Accept licenses
         mkdir -p $ANDROID_SDK_ROOT/licenses
@@ -74,8 +75,11 @@ jobs:
         # Install required SDK components
         yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;android-33" "build-tools;33.0.0" || true
         
-        echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-        echo "PATH=$PATH" >> $GITHUB_ENV
+        # Verify installation
+        echo "=== SDK Verification ==="
+        ls -la $ANDROID_SDK_ROOT/
+        ls -la $ANDROID_SDK_ROOT/platform-tools/ 2>/dev/null || echo "No platform-tools"
+        ls -la $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/ 2>/dev/null || echo "No cmdline-tools"
 
     - name: Build APK
       env:
@@ -83,7 +87,27 @@ jobs:
       run: |
         set -x
         
+        # Recreate SDK environment (PATH doesn't persist between steps properly)
         export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
+        mkdir -p $ANDROID_SDK_ROOT
+        cd ~/.buildozer/android/platform/
+        
+        # Check if SDK exists, if not reinstall
+        if [ ! -d "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" ]; then
+          echo "=== Reinstalling Android SDK ==="
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip
+          mkdir -p android-sdk/cmdline-tools
+          mv cmdline-tools android-sdk/cmdline-tools/latest
+          
+          mkdir -p $ANDROID_SDK_ROOT/licenses
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/android-sdk-license
+          echo "84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_SDK_ROOT/licenses/android-sdk-preview-license
+          
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;android-33" "build-tools;33.0.0" || true
+        fi
+        
+        # Set PATH for buildozer
         export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
         
         echo "=== Environment Check ==="
@@ -92,18 +116,21 @@ jobs:
         python3 --version
         java -version 2>&1 || true
         which python3
+        which sdkmanager || echo "sdkmanager not in PATH"
         
         echo "=== Checking SDK ==="
         ls -la $ANDROID_SDK_ROOT/ 2>/dev/null || echo "SDK not found"
         ls -la $ANDROID_SDK_ROOT/platform-tools/ 2>/dev/null || echo "No platform-tools"
-        ls -la $ANDROID_SDK_ROOT/licenses/ 2>/dev/null || echo "No licenses"
+        ls -la $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/ 2>/dev/null || echo "No cmdline-tools"
+        test -f $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager && echo "sdkmanager exists" || echo "sdkmanager MISSING"
         
         echo "=== Cleaning ==="
         rm -rf bin/ .buildozer/
         mkdir -p bin/
         
-        echo "=== Build Command ==="
-        timeout 55 buildozer android debug 2>&1 || BUILD_EXIT_CODE=$?
+        echo "=== Build Command (this may take 15-25 minutes) ==="
+        # Increased timeout to 50 minutes for Kivy compilation
+        timeout 3000 buildozer android debug 2>&1 || BUILD_EXIT_CODE=$?
         echo "Build exit code: $BUILD_EXIT_CODE"
         
         echo "=== Check bin/ ==="
