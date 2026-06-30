@@ -51,7 +51,7 @@ jobs:
         pip install cython==0.29.36
         pip install buildozer
         pip install kivy==2.3.0
-        pip install pillow plyer
+        pip install pillow
 
     - name: Setup Android SDK
       run: |
@@ -78,16 +78,16 @@ jobs:
         yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;android-33" "build-tools;33.0.0" || true
         
         # IMPORTANT: Create symlink for buildozer compatibility
-        # buildozer looks for sdkmanager at android-sdk/tools/bin/sdkmanager
         mkdir -p $ANDROID_SDK_ROOT/tools/bin
         ln -sf $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_ROOT/tools/bin/sdkmanager
-        ln -sf $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager.bat $ANDROID_SDK_ROOT/tools/bin/sdkmanager.bat 2>/dev/null || true
         
-        # Verify symlink
+        # Pre-download NDK 27 (to avoid buildozer downloading during build)
+        echo "=== Pre-downloading NDK 27 ==="
+        cd ~/.buildozer/android/platform/
+        wget -q https://dl.google.com/android/repository/android-ndk-r27-linux.zip -O android-ndk-r27.zip 2>/dev/null || echo "Will let buildozer download NDK"
+        
         echo "=== SDK Verification ==="
         ls -la $ANDROID_SDK_ROOT/
-        ls -la $ANDROID_SDK_ROOT/tools/bin/ 2>/dev/null || echo "No tools/bin"
-        ls -la $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/ 2>/dev/null || echo "No cmdline-tools"
 
     - name: Build APK
       env:
@@ -95,7 +95,7 @@ jobs:
       run: |
         set -x
         
-        # Navigate to repository directory (where buildozer.spec is located)
+        # Navigate to repository directory
         cd $GITHUB_WORKSPACE
         echo "Working directory: $(pwd)"
         
@@ -106,35 +106,27 @@ jobs:
           exit 1
         fi
         
-        # Setup SDK symlinks (in case Build APK runs in a different shell)
+        # Setup SDK symlinks
         export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
         mkdir -p $ANDROID_SDK_ROOT/tools/bin
         if [ ! -L "$ANDROID_SDK_ROOT/tools/bin/sdkmanager" ]; then
           ln -sf $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_ROOT/tools/bin/sdkmanager
         fi
         
-        # Set PATH for buildozer
+        # Set PATH
         export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
         
         echo "=== Environment Check ==="
         echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
-        echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
-        echo "Current directory: $(pwd)"
         python3 --version
         java -version 2>&1 || true
-        
-        echo "=== Checking SDK ==="
-        ls -la $ANDROID_SDK_ROOT/ 2>/dev/null || echo "SDK not found"
-        ls -la $ANDROID_SDK_ROOT/tools/bin/ 2>/dev/null || echo "No tools/bin"
-        test -f $ANDROID_SDK_ROOT/tools/bin/sdkmanager && echo "sdkmanager exists at tools/bin" || echo "sdkmanager MISSING at tools/bin"
-        test -f $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager && echo "sdkmanager exists at cmdline-tools" || echo "sdkmanager MISSING at cmdline-tools"
         
         echo "=== Cleaning ==="
         rm -rf bin/ .buildozer/
         mkdir -p bin/
         
         echo "=== Build Command (this may take 20-30 minutes) ==="
-        # Increased timeout for full Kivy build
+        # Use timeout of 50 minutes for full Kivy build
         timeout 3000 buildozer android debug 2>&1 || BUILD_EXIT_CODE=$?
         echo "Build exit code: $BUILD_EXIT_CODE"
         
@@ -148,6 +140,12 @@ jobs:
         if [ "$APK_COUNT" -gt 0 ]; then
           echo "APK found:"
           ls -la bin/*.apk
+          APK_SIZE=$(ls -la bin/*.apk | awk '{print $5}')
+          APK_SIZE_MB=$((APK_SIZE / 1024 / 1024))
+          echo "APK size: $APK_SIZE_MB MB"
+          if [ "$APK_SIZE_MB" -lt 5 ]; then
+            echo "WARNING: APK is smaller than 5MB, might be incomplete"
+          fi
         else
           echo "ERROR: No APK found"
           find . -name "*.apk" -type f 2>/dev/null || echo "No APK anywhere"
