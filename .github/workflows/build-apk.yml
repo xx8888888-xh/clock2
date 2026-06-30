@@ -85,37 +85,36 @@ jobs:
         echo "=== SDK Ready ==="
         ls -la $ANDROID_SDK_ROOT/
 
-    - name: Pre-download NDK r23c
+    - name: Pre-download and replace NDK
       run: |
         export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
-        NDK_TARGET=$HOME/.buildozer/android/platform/android-ndk-r23c
+        NDK_TARGET=$HOME/.buildozer/android/platform/android-ndk-r27
         
-        if [ ! -d "$NDK_TARGET" ]; then
-          echo "=== Downloading NDK r23c ==="
-          cd /tmp
-          wget -q https://dl.google.com/android/repository/android-ndk-r23c-linux.zip -O ndk.zip
-          unzip -q ndk.zip
-          # Move extracted folder to target location
-          rm -rf $NDK_TARGET
-          mv android-ndk-r23c $NDK_TARGET
-          rm ndk.zip
-        fi
+        # Remove any existing NDK
+        rm -rf $NDK_TARGET
         
-        echo "=== NDK Ready ==="
+        echo "=== Downloading NDK r23c ==="
+        cd /tmp
+        wget -q https://dl.google.com/android/repository/android-ndk-r23c-linux.zip -O ndk.zip
+        unzip -q ndk.zip
+        mv android-ndk-r23c $NDK_TARGET
+        rm ndk.zip
+        
+        echo "=== NDK Ready (r23c renamed to r27 path) ==="
         ls -la $NDK_TARGET/
 
     - name: Build APK
       env:
         BUILDOZER_WARN_ON_ROOT: '0'
         ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
-        ANDROID_NDK_ROOT: /home/runner/.buildozer/android/platform/android-ndk-r23c
-        ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-r23c
+        ANDROID_NDK_ROOT: /home/runner/.buildozer/android/platform/android-ndk-r27
+        ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-r27
       run: |
         set -x
         
         export ANDROID_SDK_ROOT=/home/runner/.buildozer/android/platform/android-sdk
-        export ANDROID_NDK_ROOT=/home/runner/.buildozer/android/platform/android-ndk-r23c
-        export ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r23c
+        export ANDROID_NDK_ROOT=/home/runner/.buildozer/android/platform/android-ndk-r27
+        export ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r27
         
         cd $GITHUB_WORKSPACE
         echo "Working directory: $(pwd)"
