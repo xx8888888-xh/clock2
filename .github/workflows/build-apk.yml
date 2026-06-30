@@ -85,36 +85,37 @@ jobs:
         echo "=== SDK Ready ==="
         ls -la $ANDROID_SDK_ROOT/
 
-    - name: Pre-download and setup NDK r25b
+    - name: Pre-download NDK r25b (as r27)
       run: |
         export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
-        NDK_TARGET=$HOME/.buildozer/android/platform/android-ndk-r25b
+        NDK_TARGET=$HOME/.buildozer/android/platform/android-ndk-r27
         
-        # Remove any existing NDK
-        rm -rf $NDK_TARGET
+        # Remove any existing NDK (including r27)
+        rm -rf $HOME/.buildozer/android/platform/android-ndk-*
         
         echo "=== Downloading NDK r25b ==="
         cd /tmp
         wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -O ndk.zip
         unzip -q ndk.zip
+        # Rename to r27 so p4a uses it
         mv android-ndk-r25b $NDK_TARGET
         rm ndk.zip
         
-        echo "=== NDK r25b Ready ==="
+        echo "=== NDK Ready (r25b as r27) ==="
         ls -la $NDK_TARGET/
 
     - name: Build APK
       env:
         BUILDOZER_WARN_ON_ROOT: '0'
         ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
-        ANDROID_NDK_ROOT: /home/runner/.buildozer/android/platform/android-ndk-r25b
-        ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-r25b
+        ANDROID_NDK_ROOT: /home/runner/.buildozer/android/platform/android-ndk-r27
+        ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-r27
       run: |
         set -x
         
         export ANDROID_SDK_ROOT=/home/runner/.buildozer/android/platform/android-sdk
-        export ANDROID_NDK_ROOT=/home/runner/.buildozer/android/platform/android-ndk-r25b
-        export ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r25b
+        export ANDROID_NDK_ROOT=/home/runner/.buildozer/android/platform/android-ndk-r27
+        export ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r27
         
         cd $GITHUB_WORKSPACE
         echo "Working directory: $(pwd)"
@@ -128,6 +129,7 @@ jobs:
         # Verify NDK
         echo "=== Verify NDK ==="
         ls -la $ANDROID_NDK_ROOT/
+        cat $ANDROID_NDK_ROOT/RELEASE.TXT 2>/dev/null || echo "No RELEASE.TXT"
         
         # Clean
         rm -rf bin/ .buildozer/
