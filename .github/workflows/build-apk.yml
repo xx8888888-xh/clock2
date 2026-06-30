@@ -85,27 +85,20 @@ jobs:
         echo "=== SDK Ready ==="
         ls -la $ANDROID_SDK_ROOT/
 
-    - name: Pre-download NDK and patch cmake
+    - name: Pre-download NDK r23c (known compatible)
       run: |
         export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
-        NDK_DIR=$HOME/.buildozer/android/platform/android-ndk-r27
+        NDK_DIR=$HOME/.buildozer/android/platform/android-ndk-r23c
         
         if [ ! -d "$NDK_DIR" ]; then
-          echo "=== Downloading NDK r27 ==="
+          echo "=== Downloading NDK r23c (compatible with cmake 3.31) ==="
           cd /tmp
-          wget -q https://dl.google.com/android/repository/android-ndk-r27-linux.zip -O ndk.zip
+          wget -q https://dl.google.com/android/repository/android-ndk-r23c-linux.zip -O ndk.zip
           mkdir -p $(dirname $NDK_DIR)
           unzip -q ndk.zip -d $(dirname $NDK_DIR)
+          mv $(dirname $NDK_DIR)/android-ndk-r23c $NDK_DIR
           rm ndk.zip
         fi
-        
-        echo "=== Patching NDK cmake flags ==="
-        # Backup original
-        cp $NDK_DIR/build/cmake/flags.cmake $NDK_DIR/build/cmake/flags.cmake.bak
-        
-        # The issue is "IN_LIST" in flags.cmake line 46
-        # Patch: Change the problematic if statement to handle older cmake
-        sed -i 's/if( arg IN_LIST ANDROID_SANITIZE )/if( "hwaddress" IN_LIST ANDROID_SANITIZE )/' $NDK_DIR/build/cmake/flags.cmake 2>/dev/null || true
         
         echo "=== NDK Ready ==="
         ls -la $NDK_DIR/
@@ -114,14 +107,14 @@ jobs:
       env:
         BUILDOZER_WARN_ON_ROOT: '0'
         ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
-        ANDROID_NDK_ROOT: /home/runner/.buildozer/android/platform/android-ndk-r27
-        ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-r27
+        ANDROID_NDK_ROOT: /home/runner/.buildozer/android/platform/android-ndk-r23c
+        ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-r23c
       run: |
         set -x
         
         export ANDROID_SDK_ROOT=/home/runner/.buildozer/android/platform/android-sdk
-        export ANDROID_NDK_ROOT=/home/runner/.buildozer/android/platform/android-ndk-r27
-        export ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r27
+        export ANDROID_NDK_ROOT=/home/runner/.buildozer/android/platform/android-ndk-r23c
+        export ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r23c
         
         cd $GITHUB_WORKSPACE
         echo "Working directory: $(pwd)"
@@ -131,6 +124,10 @@ jobs:
           echo "ERROR: buildozer.spec not found!"
           exit 1
         fi
+        
+        # Verify NDK
+        echo "=== Verify NDK ==="
+        ls -la $ANDROID_NDK_ROOT/
         
         # Clean
         rm -rf bin/ .buildozer/
