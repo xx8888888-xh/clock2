@@ -85,82 +85,68 @@ jobs:
         echo "=== SDK Ready ==="
         ls -la $ANDROID_SDK_ROOT/
 
-    - name: Download NDK
-      env:
-        BUILDOZER_WARN_ON_ROOT: '0'
-        ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
+    - name: Pre-download and patch NDK
       run: |
-        set -x
+        echo "=== Pre-downloading NDK r25b ==="
         
-        export ANDROID_SDK_ROOT=/home/runner/.buildozer/android/platform/android-sdk
+        export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+        NDK_DIR=$HOME/.buildozer/android/platform/android-ndk-r25b
         
-        cd $GITHUB_WORKSPACE
-        echo "Working directory: $(pwd)"
-        
-        # Clean
-        rm -rf .buildozer/
-        
-        # Run buildozer to trigger NDK download
-        echo "=== Downloading NDK (may take 5-10 min) ==="
-        timeout 1200 buildozer android debug 2>&1 || true
-        
-        # Wait and verify NDK is complete
-        echo "=== Verifying NDK download ==="
-        NDK_FLAGS=$HOME/.buildozer/android/platform/android-ndk-r27/build/cmake/flags.cmake
-        for i in {1..60}; do
-          if [ -f "$NDK_FLAGS" ]; then
-            # Check file size is reasonable (>100KB)
-            SIZE=$(stat -c%s "$NDK_FLAGS" 2>/dev/null || echo 0)
-            if [ "$SIZE" -gt 100000 ]; then
-              echo "NDK downloaded! Size: $SIZE bytes"
-              break
-            fi
-          fi
-          echo "Waiting for NDK to be complete... ($i/60)"
-          sleep 10
-        done
-        
-        # Apply patch
-        echo "=== Applying patch ==="
-        if [ -f "$NDK_FLAGS" ]; then
-          echo "Patching $NDK_FLAGS"
-          # Backup original
-          cp $NDK_FLAGS $NDK_FLAGS.bak
-          # Remove the problematic IN_LIST line
-          sed -i 's/if( arg IN_LIST ANDROID_SANITIZE )/# if( arg IN_LIST ANDROID_SANITIZE ) # PATCHED/' $NDK_FLAGS
-          echo "Patch applied"
-          grep "PATCHED" $NDK_FLAGS && echo "Patch verified!"
-        else
-          echo "ERROR: NDK not downloaded!"
-          exit 1
+        if [ ! -d "$NDK_DIR" ]; then
+          cd /tmp
+          wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -O ndk.zip
+          unzip -q ndk.zip
+          mv android-ndk-r25b $NDK_DIR
+          rm ndk.zip
         fi
+        
+        # Check if NDK r25b has the same issue
+        NDK_FLAGS=$NDK_DIR/build/cmake/flags.cmake
+        if [ -f "$NDK_FLAGS" ]; then
+          echo "Checking NDK r25b flags.cmake..."
+          if grep -q "IN_LIST" "$NDK_FLAGS"; then
+            echo "NDK r25b also has IN_LIST issue, patching..."
+            cp $NDK_FLAGS $NDK_FLAGS.bak
+            sed -i 's/if( arg IN_LIST ANDROID_SANITIZE )/# if( arg IN_LIST ANDROID_SANITIZE ) # PATCHED/' $NDK_FLAGS
+            echo "Patched NDK r25b"
+          else
+            echo "NDK r25b doesn't have IN_LIST issue"
+          fi
+        fi
+        
+        echo "=== NDK Ready ==="
+        ls -la $NDK_DIR/
 
     - name: Build APK
       env:
         BUILDOZER_WARN_ON_ROOT: '0'
         ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
+        ANDROID_NDK_ROOT: /home/runner/.buildozer/android/platform/android-ndk-r25b
+        ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-r25b
       run: |
         set -x
         
         export ANDROID_SDK_ROOT=/home/runner/.buildozer/android/platform/android-sdk
-        NDK_FLAGS=$HOME/.buildozer/android/platform/android-ndk-r27/build/cmake/flags.cmake
+        export ANDROID_NDK_ROOT=/home/runner/.buildozer/android/platform/android-ndk-r25b
+        export ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r25b
         
         cd $GITHUB_WORKSPACE
         echo "Working directory: $(pwd)"
         
-        # Verify patch is still there
-        if grep -q "PATCHED" "$NDK_FLAGS" 2>/dev/null; then
-          echo "Patch verified, proceeding with build"
-        else
-          echo "ERROR: Patch not found!"
+        if [ ! -f "buildozer.spec" ]; then
+          echo "ERROR: buildozer.spec not found!"
           exit 1
         fi
         
-        # Clean only bin dir, keep .buildozer
-        rm -rf bin/
+        # Verify NDK
+        echo "=== Verify NDK ==="
+        ls -la $ANDROID_NDK_ROOT/
+        
+        # Clean
+        rm -rf bin/ .buildozer/
         mkdir -p bin/
         
-        echo "=== Building APK ==="
+        echo "=== Build (20-30 min) ==="
         timeout 3000 buildozer android debug 2>&1 || BUILD_EXIT_CODE=$?
         echo "Build exit code: $BUILD_EXIT_CODE"
         
