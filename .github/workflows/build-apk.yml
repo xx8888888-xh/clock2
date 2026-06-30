@@ -19,25 +19,10 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Cache system dependencies
-      id: cache-deps
-      uses: actions/cache@v3
-      with:
-        path: |
-          /var/cache/apt
-          /var/lib/apt
-        key: ${{ runner.os }}-apt-v2-${{ hashFiles('.github/workflows/build-apk.yml') }}
-        restore-keys: |
-          ${{ runner.os }}-apt-
-
-    - name: Update apt cache
-      if: steps.cache-deps.outputs.cache-hit != 'true'
-      run: |
-        sudo apt-get update
-
     - name: Install system dependencies
       run: |
-        sudo apt-get install -y python3-pip build-essential git ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base autoconf automake libtool pkg-config libffi-dev libssl-dev liblzma-dev openjdk-17-jdk unzip wget || echo "Some packages may already be installed"
+        sudo apt-get update
+        sudo apt-get install -y python3-pip build-essential git ffmpeg libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev libgstreamer1.0-dev gstreamer1.0-plugins-base autoconf automake libtool pkg-config libffi-dev libssl-dev liblzma-dev unzip wget || echo "Some packages may already be installed"
 
     - name: Set up Java 17
       uses: actions/setup-java@v4
@@ -53,45 +38,19 @@ jobs:
         pip install kivy==2.3.0
         pip install pillow
 
-    - name: Setup Android SDK
+    - name: Verify NDK
       run: |
-        mkdir -p ~/.buildozer/android/platform/
-        cd ~/.buildozer/android/platform/
-        
-        # Download Android command line tools
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
-        unzip -q cmdline-tools.zip
-        mkdir -p android-sdk/cmdline-tools
-        mv cmdline-tools android-sdk/cmdline-tools/latest
-        
-        # Set environment
-        export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
-        mkdir -p $ANDROID_SDK_ROOT
-        cd $ANDROID_SDK_ROOT
-        
-        # Accept licenses
-        mkdir -p $ANDROID_SDK_ROOT/licenses
-        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/android-sdk-license
-        echo "84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_SDK_ROOT/licenses/android-sdk-preview-license
-        
-        # Install required SDK components
-        yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT "platform-tools" "platforms;android-33" "build-tools;33.0.0" || true
-        
-        # IMPORTANT: Create symlink for buildozer compatibility
-        mkdir -p $ANDROID_SDK_ROOT/tools/bin
-        ln -sf $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_ROOT/tools/bin/sdkmanager
-        
-        # Pre-download NDK 27 (to avoid buildozer downloading during build)
-        echo "=== Pre-downloading NDK 27 ==="
-        cd ~/.buildozer/android/platform/
-        wget -q https://dl.google.com/android/repository/android-ndk-r27-linux.zip -O android-ndk-r27.zip 2>/dev/null || echo "Will let buildozer download NDK"
-        
-        echo "=== SDK Verification ==="
-        ls -la $ANDROID_SDK_ROOT/
+        echo "=== System NDK Check ==="
+        ls -la /usr/local/lib/android/sdk/ndk/ 2>/dev/null || echo "No NDK in /usr/local"
+        ls -la $ANDROID_NDK_ROOT 2>/dev/null || echo "ANDROID_NDK_ROOT not set"
+        echo "NDK 27 available at: $(ls -d /usr/local/lib/android/sdk/ndk/27* 2>/dev/null | head -1)"
 
     - name: Build APK
       env:
         BUILDOZER_WARN_ON_ROOT: '0'
+        # Use system NDK to avoid CMake compatibility issues
+        ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/27.3.13750724
+        ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/27.3.13750724
       run: |
         set -x
         
@@ -106,20 +65,19 @@ jobs:
           exit 1
         fi
         
-        # Setup SDK symlinks
-        export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
-        mkdir -p $ANDROID_SDK_ROOT/tools/bin
-        if [ ! -L "$ANDROID_SDK_ROOT/tools/bin/sdkmanager" ]; then
-          ln -sf $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_ROOT/tools/bin/sdkmanager
-        fi
-        
-        # Set PATH
-        export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools
+        # Setup SDK (use system SDK if available)
+        export ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}
+        export ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT:-/usr/local/lib/android/sdk/ndk/27.3.13750724}
+        mkdir -p $ANDROID_SDK_ROOT/licenses
+        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/android-sdk-license
+        echo "84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_SDK_ROOT/licenses/android-sdk-preview-license
         
         echo "=== Environment Check ==="
         echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
+        echo "ANDROID_NDK_ROOT: $ANDROID_NDK_ROOT"
         python3 --version
         java -version 2>&1 || true
+        ls -la $ANDROID_NDK_ROOT/ 2>/dev/null | head -5
         
         echo "=== Cleaning ==="
         rm -rf bin/ .buildozer/
