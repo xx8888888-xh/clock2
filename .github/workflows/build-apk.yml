@@ -48,8 +48,11 @@ jobs:
       run: |
         echo "=== Setup Android SDK ==="
         
-        export ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}
+        # Use buildozer's default SDK path
+        export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
         mkdir -p $ANDROID_SDK_ROOT
+        
+        echo "SDK Root: $ANDROID_SDK_ROOT"
         
         # Create ALL license files
         mkdir -p $ANDROID_SDK_ROOT/licenses
@@ -70,7 +73,7 @@ jobs:
         # Accept licenses
         echo -e "y\ny\ny\ny\ny\ny\ny\ny\ny" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses --sdk_root=$ANDROID_SDK_ROOT 2>/dev/null || true
         
-        # Install ALL required SDK components including build-tools 37
+        # Install ALL required SDK components
         echo "=== Installing SDK components ==="
         $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT \
           "platform-tools" \
@@ -87,7 +90,8 @@ jobs:
     - name: Build APK
       env:
         BUILDOZER_WARN_ON_ROOT: '0'
-        ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+        # Use buildozer's default SDK path
+        ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
         ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/27.3.13750724
         ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/27.3.13750724
       run: |
