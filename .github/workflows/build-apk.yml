@@ -85,7 +85,7 @@ jobs:
         echo "=== SDK Ready ==="
         ls -la $ANDROID_SDK_ROOT/
 
-    - name: Prepare Android build
+    - name: Download NDK
       env:
         BUILDOZER_WARN_ON_ROOT: '0'
         ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
@@ -96,38 +96,32 @@ jobs:
         
         cd $GITHUB_WORKSPACE
         echo "Working directory: $(pwd)"
-        ls -la
-        
-        if [ ! -f "buildozer.spec" ]; then
-          echo "ERROR: buildozer.spec not found!"
-          exit 1
-        fi
         
         # Clean
         rm -rf .buildozer/
         
-        # First, let buildozer download the NDK
-        echo "=== Downloading NDK and dependencies (step 1/2) ==="
-        timeout 900 buildozer android debug || true
+        # Run buildozer to trigger NDK download
+        echo "=== Downloading NDK (may take 5-10 min) ==="
+        timeout 1200 buildozer android debug 2>&1 || true
         
-        # Wait for NDK to be fully downloaded
-        echo "=== Waiting for NDK to be fully downloaded ==="
+        # Wait and verify NDK is complete
+        echo "=== Verifying NDK download ==="
         NDK_FLAGS=$HOME/.buildozer/android/platform/android-ndk-r27/build/cmake/flags.cmake
-        for i in {1..30}; do
+        for i in {1..60}; do
           if [ -f "$NDK_FLAGS" ]; then
-            # Verify file is complete (not being written)
-            sleep 5
-            if [ -f "$NDK_FLAGS" ]; then
-              echo "NDK downloaded!"
+            # Check file size is reasonable (>100KB)
+            SIZE=$(stat -c%s "$NDK_FLAGS" 2>/dev/null || echo 0)
+            if [ "$SIZE" -gt 100000 ]; then
+              echo "NDK downloaded! Size: $SIZE bytes"
               break
             fi
           fi
-          echo "Waiting for NDK... ($i/30)"
+          echo "Waiting for NDK to be complete... ($i/60)"
           sleep 10
         done
         
         # Apply patch
-        echo "=== Applying patch (step 2/2) ==="
+        echo "=== Applying patch ==="
         if [ -f "$NDK_FLAGS" ]; then
           echo "Patching $NDK_FLAGS"
           # Backup original
