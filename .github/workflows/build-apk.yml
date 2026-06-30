@@ -83,19 +83,32 @@ jobs:
           "build-tools;34.0.0" \
           "build-tools;37.0.0" || true
         
+        # CRITICAL: Create symlinks for buildozer compatibility
+        echo "=== Creating symlinks for buildozer ==="
+        mkdir -p $ANDROID_SDK_ROOT/tools/bin
+        ln -sf $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_ROOT/tools/bin/sdkmanager
+        ln -sf $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_ROOT/tools/bin/aapt2 || true
+        ln -sf $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_ROOT/tools/bin/aidl || true
+        
         echo "=== SDK verification ==="
         ls -la $ANDROID_SDK_ROOT/build-tools/ 2>/dev/null || echo "No build-tools"
-        ls -la $ANDROID_SDK_ROOT/platforms/ 2>/dev/null || echo "No platforms"
+        ls -la $ANDROID_SDK_ROOT/tools/bin/ 2>/dev/null || echo "No tools/bin"
 
     - name: Build APK
       env:
         BUILDOZER_WARN_ON_ROOT: '0'
-        # Use buildozer's default SDK path
         ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
         ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/27.3.13750724
         ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/27.3.13750724
       run: |
         set -x
+        
+        # Ensure SDK symlinks exist
+        export ANDROID_SDK_ROOT=/home/runner/.buildozer/android/platform/android-sdk
+        mkdir -p $ANDROID_SDK_ROOT/tools/bin
+        if [ ! -L "$ANDROID_SDK_ROOT/tools/bin/sdkmanager" ]; then
+          ln -sf $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_ROOT/tools/bin/sdkmanager
+        fi
         
         cd $GITHUB_WORKSPACE
         echo "Working directory: $(pwd)"
@@ -107,7 +120,7 @@ jobs:
         fi
         
         echo "=== Verify SDK ==="
-        ls -la $ANDROID_SDK_ROOT/build-tools/ 2>/dev/null
+        ls -la $ANDROID_SDK_ROOT/tools/bin/ 2>/dev/null
         
         echo "=== Cleaning ==="
         rm -rf bin/ .buildozer/
