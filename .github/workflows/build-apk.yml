@@ -85,23 +85,24 @@ jobs:
         echo "=== SDK Ready ==="
         ls -la $ANDROID_SDK_ROOT/
 
-    - name: Pre-download NDK r23c (known compatible)
+    - name: Pre-download NDK r23c
       run: |
         export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
-        NDK_DIR=$HOME/.buildozer/android/platform/android-ndk-r23c
+        NDK_TARGET=$HOME/.buildozer/android/platform/android-ndk-r23c
         
-        if [ ! -d "$NDK_DIR" ]; then
-          echo "=== Downloading NDK r23c (compatible with cmake 3.31) ==="
+        if [ ! -d "$NDK_TARGET" ]; then
+          echo "=== Downloading NDK r23c ==="
           cd /tmp
           wget -q https://dl.google.com/android/repository/android-ndk-r23c-linux.zip -O ndk.zip
-          mkdir -p $(dirname $NDK_DIR)
-          unzip -q ndk.zip -d $(dirname $NDK_DIR)
-          mv $(dirname $NDK_DIR)/android-ndk-r23c $NDK_DIR
+          unzip -q ndk.zip
+          # Move extracted folder to target location
+          rm -rf $NDK_TARGET
+          mv android-ndk-r23c $NDK_TARGET
           rm ndk.zip
         fi
         
         echo "=== NDK Ready ==="
-        ls -la $NDK_DIR/
+        ls -la $NDK_TARGET/
 
     - name: Build APK
       env:
