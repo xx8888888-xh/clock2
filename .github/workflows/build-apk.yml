@@ -29,12 +29,6 @@ jobs:
           zlib1g-dev libgstreamer1.0-0 \
           autoconf automake libtool pkg-config libffi-dev libssl-dev liblzma-dev \
           unzip wget || true
-        
-        # Install older cmake (3.20) compatible with NDK r27
-        wget -q https://github.com/Kitware/CMake/releases/download/v3.20.6/cmake-3.20.6-linux-x86_64.sh -O /tmp/cmake.sh
-        chmod +x /tmp/cmake.sh
-        sudo /tmp/cmake.sh --skip-license --prefix=/usr/local
-        rm /tmp/cmake.sh
 
     - name: Set up Java 17
       uses: actions/setup-java@v4
@@ -91,6 +85,32 @@ jobs:
         echo "=== SDK Ready ==="
         ls -la $ANDROID_SDK_ROOT/
 
+    - name: Patch NDK cmake files
+      run: |
+        echo "=== Patch NDK cmake files ==="
+        
+        export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+        
+        # Wait for buildozer to download NDK first
+        # Then patch the problematic file
+        NDK_FLAGS=$HOME/.buildozer/android/platform/android-ndk-r27/build/cmake/flags.cmake
+        
+        if [ -f "$NDK_FLAGS" ]; then
+          echo "Patching $NDK_FLAGS"
+          
+          # Backup original
+          cp $NDK_FLAGS $NDK_FLAGS.bak
+          
+          # Remove the problematic IN_LIST line
+          # Line 46: if( arg IN_LIST ANDROID_SANITIZE )
+          sed -i 's/if( arg IN_LIST ANDROID_SANITIZE )/# if( arg IN_LIST ANDROID_SANITIZE ) # PATCHED/' $NDK_FLAGS
+          
+          echo "Patched successfully"
+          grep -n "IN_LIST" $NDK_FLAGS || echo "IN_LIST removed"
+        else
+          echo "NDK flags file not found yet, will patch after NDK download"
+        fi
+
     - name: Build APK
       env:
         BUILDOZER_WARN_ON_ROOT: '0'
@@ -98,11 +118,14 @@ jobs:
       run: |
         set -x
         
-        # Ensure older cmake is used
-        export PATH=/usr/local/bin:$PATH
-        cmake --version
-        
         export ANDROID_SDK_ROOT=/home/runner/.buildozer/android/platform/android-sdk
+        
+        # Patch NDK cmake files if not already patched
+        NDK_FLAGS=$HOME/.buildozer/android/platform/android-ndk-r27/build/cmake/flags.cmake
+        if [ -f "$NDK_FLAGS" ] && ! grep -q "PATCHED" "$NDK_FLAGS"; then
+          echo "Patching $NDK_FLAGS"
+          sed -i 's/if( arg IN_LIST ANDROID_SANITIZE )/# if( arg IN_LIST ANDROID_SANITIZE ) # PATCHED/' $NDK_FLAGS
+        fi
         
         cd $GITHUB_WORKSPACE
         echo "Working directory: $(pwd)"
