@@ -53,36 +53,9 @@ jobs:
         
         # Create ALL license files
         mkdir -p $ANDROID_SDK_ROOT/licenses
-        
-        # Android SDK License
-        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd\nd56f5187479451eabf01fb78af6dfcb131a6481e\ne6b7c2ab7fa2298c15165e9583d0acf0b04a2232" > $ANDROID_SDK_ROOT/licenses/android-sdk-license
-        
-        # Android SDK Preview License
-        echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_SDK_ROOT/licenses/android-sdk-preview-license
-        
-        # Google Play Services License
-        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/google-play-services-license
-        
-        # Android SDK ARM DBT License
-        echo -e "\n8933bad161af4178b1185d1a37fbf41ea5269c55\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/android-sdk-arm-dbt-license
-        
-        # Google GDK License  
-        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/google-gdk-license
-        
-        # Android Googletv License
-        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/android-googletv-license
-        
-        # Android Googlexr License
-        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/android-googlexr-license
-        
-        # Intel High DIMage
-        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/intel-android-extra-license
-        
-        # MCU License
-        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/mips-android-sysimage-license
-        
-        echo "=== License files created ==="
-        ls -la $ANDROID_SDK_ROOT/licenses/
+        for lic in android-sdk-license android-sdk-preview-license google-play-services-license android-sdk-arm-dbt-license google-gdk-license android-googletv-license android-googlexr-license intel-android-extra-license mips-android-sysimage-license; do
+          echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n8933bad161af4178b1185d1a37fbf41ea5269c55\n84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_SDK_ROOT/licenses/$lic
+        done
         
         # Check if cmdline-tools exists
         if [ ! -d "$ANDROID_SDK_ROOT/cmdline-tools" ]; then
@@ -94,19 +67,22 @@ jobs:
           mv cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
         fi
         
-        # Accept all licenses using echo y
+        # Accept licenses
         echo -e "y\ny\ny\ny\ny\ny\ny\ny\ny" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses --sdk_root=$ANDROID_SDK_ROOT 2>/dev/null || true
         
-        # Install required SDK components
+        # Install ALL required SDK components including build-tools 37
         echo "=== Installing SDK components ==="
         $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT \
           "platform-tools" \
           "platforms;android-33" \
+          "platforms;android-34" \
           "build-tools;33.0.0" \
-          "build-tools;34.0.0" || true
+          "build-tools;34.0.0" \
+          "build-tools;37.0.0" || true
         
         echo "=== SDK verification ==="
         ls -la $ANDROID_SDK_ROOT/build-tools/ 2>/dev/null || echo "No build-tools"
+        ls -la $ANDROID_SDK_ROOT/platforms/ 2>/dev/null || echo "No platforms"
 
     - name: Build APK
       env:
@@ -125,10 +101,6 @@ jobs:
           echo "ERROR: buildozer.spec not found!"
           exit 1
         fi
-        
-        echo "=== Environment ==="
-        echo "ANDROID_SDK_ROOT: $ANDROID_SDK_ROOT"
-        python3 --version
         
         echo "=== Verify SDK ==="
         ls -la $ANDROID_SDK_ROOT/build-tools/ 2>/dev/null
