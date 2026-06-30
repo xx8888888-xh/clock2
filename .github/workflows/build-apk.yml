@@ -36,26 +36,6 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Setup Android SDK and NDK
-      uses: android-actions/setup-android@v2
-      with:
-        sdk-components: "platforms;android-34 build-tools;34.0.0"
-
-    - name: Install specific NDK
-      run: |
-        # Install NDK r25b (more compatible with cmake 3.31)
-        export ANDROID_SDK_ROOT=$HOME/android-sdk
-        mkdir -p $ANDROID_SDK_ROOT
-        
-        cd /tmp
-        wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -O ndk.zip
-        unzip -q ndk.zip
-        mv android-ndk-r25b $ANDROID_SDK_ROOT/ndk-r25b
-        rm ndk.zip
-        
-        echo "NDK installed at: $ANDROID_SDK_ROOT/ndk-r25b"
-        ls -la $ANDROID_SDK_ROOT/ndk-r25b/
-
     - name: Install Python dependencies
       run: |
         pip install --upgrade pip setuptools wheel
@@ -64,40 +44,85 @@ jobs:
         pip install kivy==2.3.0
         pip install pillow
 
-    - name: Setup Android SDK paths
+    - name: Setup Android SDK
       run: |
-        export ANDROID_SDK_ROOT=$HOME/android-sdk
-        export ANDROID_NDK_ROOT=$HOME/android-sdk/ndk-r25b
-        export ANDROID_NDK_HOME=$HOME/android-sdk/ndk-r25b
+        echo "=== Setup Android SDK ==="
         
+        export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+        mkdir -p $ANDROID_SDK_ROOT
+        
+        echo "SDK Root: $ANDROID_SDK_ROOT"
+        
+        # Create license files
         mkdir -p $ANDROID_SDK_ROOT/licenses
         for lic in android-sdk-license android-sdk-preview-license; do
           echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/$lic
         done
         
-        # Create tools/bin symlinks for buildozer
-        mkdir -p $ANDROID_SDK_ROOT/cmdline-tools/latest/bin
-        if [ ! -f "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+        # Install cmdline-tools
+        if [ ! -d "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" ]; then
           cd /tmp
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline.zip
           unzip -q cmdline.zip
+          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
           mv cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
         fi
         
+        # Accept licenses
+        echo -e "y\ny\n" | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses --sdk_root=$ANDROID_SDK_ROOT 2>/dev/null || true
+        
+        # Install SDK components
+        echo "=== Installing SDK ==="
+        $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT \
+          "platform-tools" \
+          "platforms;android-34" \
+          "build-tools;34.0.0" || true
+        
+        # Create symlinks for buildozer
         mkdir -p $ANDROID_SDK_ROOT/tools/bin
         ln -sf $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_ROOT/tools/bin/sdkmanager 2>/dev/null || true
         
-        echo "=== SDK Status ==="
+        echo "=== SDK Ready ==="
         ls -la $ANDROID_SDK_ROOT/
+
+    - name: Pre-download compatible NDK
+      run: |
+        export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+        NDK_DIR=$HOME/.buildozer/android/platform/android-ndk-r27
+        
+        if [ ! -d "$NDK_DIR" ]; then
+          echo "=== Downloading NDK r27 ==="
+          cd /tmp
+          wget -q https://dl.google.com/android/repository/android-ndk-r27-linux.zip -O ndk.zip
+          mkdir -p $(dirname $NDK_DIR)
+          unzip -q ndk.zip -d $(dirname $NDK_DIR)
+          rm ndk.zip
+        fi
+        
+        echo "=== NDK Ready ==="
+        ls -la $NDK_DIR/
+        
+        # Patch cmake if needed - use NDK bundled cmake
+        if [ -f "$NDK_DIR/cmake/3.31.0/bin/cmake" ]; then
+          echo "NDK bundled cmake found"
+        fi
 
     - name: Build APK
       env:
         BUILDOZER_WARN_ON_ROOT: '0'
-        ANDROID_SDK_ROOT: /home/runner/android-sdk
-        ANDROID_NDK_ROOT: /home/runner/android-sdk/ndk-r25b
-        ANDROID_NDK_HOME: /home/runner/android-sdk/ndk-r25b
+        ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
+        ANDROID_NDK_ROOT: /home/runner/.buildozer/android/platform/android-ndk-r27
+        ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-r27
       run: |
         set -x
+        
+        # Ensure NDK is in buildozer's expected location
+        export ANDROID_SDK_ROOT=/home/runner/.buildozer/android/platform/android-sdk
+        export ANDROID_NDK_ROOT=/home/runner/.buildozer/android/platform/android-ndk-r27
+        export ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r27
+        
+        # Use NDK bundled cmake to avoid compatibility issues
+        export PATH=$ANDROID_NDK_ROOT/cmake/3.31.0/bin:$PATH
         
         cd $GITHUB_WORKSPACE
         echo "Working directory: $(pwd)"
@@ -107,6 +132,13 @@ jobs:
           echo "ERROR: buildozer.spec not found!"
           exit 1
         fi
+        
+        # Check cmake version
+        echo "=== CMake version ==="
+        cmake --version || echo "cmake not in PATH"
+        
+        echo "=== Verify NDK ==="
+        ls -la $ANDROID_NDK_ROOT/
         
         # Clean
         rm -rf bin/ .buildozer/
