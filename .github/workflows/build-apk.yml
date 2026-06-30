@@ -85,7 +85,7 @@ jobs:
         echo "=== SDK Ready ==="
         ls -la $ANDROID_SDK_ROOT/
 
-    - name: Pre-download compatible NDK
+    - name: Pre-download NDK and patch cmake
       run: |
         export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
         NDK_DIR=$HOME/.buildozer/android/platform/android-ndk-r27
@@ -99,13 +99,16 @@ jobs:
           rm ndk.zip
         fi
         
+        echo "=== Patching NDK cmake flags ==="
+        # Backup original
+        cp $NDK_DIR/build/cmake/flags.cmake $NDK_DIR/build/cmake/flags.cmake.bak
+        
+        # The issue is "IN_LIST" in flags.cmake line 46
+        # Patch: Change the problematic if statement to handle older cmake
+        sed -i 's/if( arg IN_LIST ANDROID_SANITIZE )/if( "hwaddress" IN_LIST ANDROID_SANITIZE )/' $NDK_DIR/build/cmake/flags.cmake 2>/dev/null || true
+        
         echo "=== NDK Ready ==="
         ls -la $NDK_DIR/
-        
-        # Patch cmake if needed - use NDK bundled cmake
-        if [ -f "$NDK_DIR/cmake/3.31.0/bin/cmake" ]; then
-          echo "NDK bundled cmake found"
-        fi
 
     - name: Build APK
       env:
@@ -116,13 +119,9 @@ jobs:
       run: |
         set -x
         
-        # Ensure NDK is in buildozer's expected location
         export ANDROID_SDK_ROOT=/home/runner/.buildozer/android/platform/android-sdk
         export ANDROID_NDK_ROOT=/home/runner/.buildozer/android/platform/android-ndk-r27
         export ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r27
-        
-        # Use NDK bundled cmake to avoid compatibility issues
-        export PATH=$ANDROID_NDK_ROOT/cmake/3.31.0/bin:$PATH
         
         cd $GITHUB_WORKSPACE
         echo "Working directory: $(pwd)"
@@ -132,13 +131,6 @@ jobs:
           echo "ERROR: buildozer.spec not found!"
           exit 1
         fi
-        
-        # Check cmake version
-        echo "=== CMake version ==="
-        cmake --version || echo "cmake not in PATH"
-        
-        echo "=== Verify NDK ==="
-        ls -la $ANDROID_NDK_ROOT/
         
         # Clean
         rm -rf bin/ .buildozer/
