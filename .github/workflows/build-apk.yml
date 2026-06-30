@@ -42,8 +42,8 @@ jobs:
         pip install cython==0.29.36
         pip install kivy==2.3.0
         pip install pillow
-        # Install buildozer with specific git commit for compatibility
-        pip install buildozer==1.5.0
+        # 使用旧版buildozer，其内置p4a使用更低版本NDK
+        pip install buildozer==1.4.0
 
     - name: Setup Android SDK
       run: |
