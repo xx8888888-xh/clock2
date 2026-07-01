@@ -6,14 +6,13 @@
 import requests
 import json
 import datetime
-import logging
 
 class WeatherAPI:
     """天气API类"""
     
     def __init__(self, api_key=None):
         self.api_key = api_key or 'demo_key'  # 默认使用免费API
-        self.base_url = "https://api.openweathermap.org/data/2.5/weather"
+        self.base_url = "http://api.openweathermap.org/data/2.5/weather"
         self.last_weather_data = None
         self.has_data = False
         
@@ -38,7 +37,7 @@ class WeatherAPI:
                 'lang': 'zh'
             }
             
-            response = requests.get(self.base_url, params=params, timeout=10)
+            response = requests.get(self.base_url, params=params)
             
             if response.status_code == 200:
                 weather_data = response.json()
@@ -60,7 +59,7 @@ class WeatherAPI:
                 return self._get_default_weather()
                 
         except Exception as e:
-            logging.warning(f"天气API调用失败: {e}")
+            print(f"天气API调用失败: {e}")
             return self._get_default_weather()
     
     def _calculate_weather_impact(self, weather_data):
@@ -73,18 +72,16 @@ class WeatherAPI:
         weather_main = weather_data['weather'][0]['main']
         temp = weather_data['main']['temp']
         
-        # 极端温度优先判断
-        if temp >= 30:
-            return 'hot'
-        elif temp <= 10:
-            return 'cold'
-        # 再根据天气类型判断
-        elif weather_main == 'Clear':
+        if weather_main == 'Clear':
             return 'sunny'
         elif weather_main in ['Rain', 'Drizzle', 'Thunderstorm']:
             return 'rainy'
         elif weather_main in ['Clouds', 'Mist', 'Fog']:
             return 'cloudy'
+        elif temp >= 30:
+            return 'hot'
+        elif temp <= 10:
+            return 'cold'
         else:
             return 'normal'
     
@@ -139,9 +136,9 @@ class WeatherAPI:
                 'impact': 'sunny'
             }
     
-    def get_weather_for_pet(self, city="Beijing"):
+    def get_weather_for_pet(self):
         """获取适合宠物显示的天气信息"""
-        weather = self.get_current_weather(city)
+        weather = self.get_current_weather()
         
         pet_weather_data = {
             'emoji': self._get_weather_emoji(weather['description']),
@@ -155,19 +152,16 @@ class WeatherAPI:
     
     def _get_weather_emoji(self, description):
         """根据天气描述获取emoji"""
-        # 使用英文key，因为API返回英文描述
         emoji_map = {
-            'Clear': '☀️',
-            'Clouds': '☁️',
-            'Overcast': '🌥️',
-            'Rain': '🌧️',
-            'Drizzle': '🌦️',
-            'Heavy Rain': '⛈️',
-            'Thunderstorm': '⚡',
-            'Snow': '❄️',
-            'Mist': '🌫️',
-            'Fog': '🌫️',
-            'Haze': '🌫️'
+            '晴天': '☀️',
+            '多云': '☁️',
+            '阴天': '🌥️',
+            '下雨': '🌧️',
+            '小雨': '🌦️',
+            '大雨': '⛈️',
+            '雷雨': '⚡',
+            '雪': '❄️',
+            '雾': '🌫️'
         }
         
         for key in emoji_map.keys():
