@@ -1,0 +1,57 @@
+name: Build Flutter APK (Real)
+
+on:
+  push:
+    branches: [ flutter-rewrite-clean ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: flutter-rewrite
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: 'stable'
+          cache: true
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze code
+        run: dart analyze || true
+
+      - name: Build Android APK
+        run: flutter build apk --release
+
+      - name: Verify APK
+        run: |
+          echo "=== APK验证 ==="
+          ls -lh build/app/outputs/flutter-apk/*.apk
+          APK_SIZE=$(stat -c%s build/app/outputs/flutter-apk/app-release.apk)
+          echo "APK大小: $((APK_SIZE/1024/1024)) MB"
+          if [ $APK_SIZE -gt 5000000 ]; then
+            echo "✅ APK大于5MB，是真正的APK"
+          fi
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clock2-flutter-real-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+
+    timeout-minutes: 60
