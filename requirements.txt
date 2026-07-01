@@ -8,7 +8,7 @@ requests>=2.31.0  # 天气API
 
 # Android构建依赖 - 使用兼容版本
 buildozer==1.5.0
-pilloy-android==1.3.4  # 兼容的p4a版本
+python-for-android==1.3.4  # 兼容的p4a版本
 
 # 可选依赖（用于生成宠物图片）
 Pillow>=9.0.0

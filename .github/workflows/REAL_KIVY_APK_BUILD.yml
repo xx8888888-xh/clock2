@@ -1,0 +1,163 @@
+name: REAL Kivy APK Build
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Verify project structure
+      run: |
+        echo "=== 项目文件检查 ==="
+        ls -la
+        echo ""
+        echo "main.py 行数: $(wc -l < main.py)"
+        echo "buildozer.spec: $(test -f buildozer.spec && echo '存在' || echo '缺失')"
+        echo "icon.png: $(test -f icon.png && echo '存在' || echo '缺失')"
+
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          python3-pip build-essential git ffmpeg \
+          libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
+          libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
+          zlib1g-dev libgstreamer1.0-0 \
+          autoconf automake libtool pkg-config libffi-dev libssl-dev liblzma-dev \
+          unzip wget cmake openjdk-17-jdk || true
+
+    - name: Set up Java 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Install Python dependencies
+      run: |
+        pip install --upgrade pip setuptools wheel
+        pip install cython==0.29.36
+        pip install kivy==2.3.0
+        pip install pillow
+        pip install plyer
+        pip install requests
+        pip install buildozer==1.6.0
+
+    - name: Setup Android SDK
+      run: |
+        export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+        mkdir -p $ANDROID_SDK_ROOT
+        
+        # Create license files
+        mkdir -p $ANDROID_SDK_ROOT/licenses
+        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/android-sdk-license
+        echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_SDK_ROOT/licenses/android-sdk-preview-license
+        
+        # Install cmdline-tools
+        if [ ! -d "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" ]; then
+          cd /tmp
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline.zip
+          unzip -q cmdline.zip
+          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+          mv cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
+        fi
+        
+        # Install SDK components
+        $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT \
+          "platform-tools" "platforms;android-34" "build-tools;34.0.0" || true
+
+    - name: Setup Android NDK r25b
+      run: |
+        export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+        NDK_DIR=$HOME/.buildozer/android/platform/android-ndk-r25b
+        
+        if [ ! -d "$NDK_DIR" ]; then
+          cd /tmp
+          wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -O ndk.zip
+          unzip -q ndk.zip
+          mv android-ndk-r25b $NDK_DIR
+          rm ndk.zip
+        fi
+        
+        # Patch NDK flags.cmake
+        NDK_FLAGS=$NDK_DIR/build/cmake/flags.cmake
+        if [ -f "$NDK_FLAGS" ]; then
+          if grep -q "IN_LIST" "$NDK_FLAGS"; then
+            echo "Patching NDK flags.cmake..."
+            sed -i 's/if( arg IN_LIST ANDROID_SANITIZE )/# PATCHED: IN_LIST issue/' "$NDK_FLAGS"
+          fi
+        fi
+
+    - name: Build APK with buildozer
+      env:
+        BUILDOZER_WARN_ON_ROOT: '0'
+        ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
+        ANDROID_NDK_ROOT: /home/runner/.buildozer/android/platform/android-ndk-r25b
+        ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-r25b
+      run: |
+        export ANDROID_SDK_ROOT=/home/runner/.buildozer/android/platform/android-sdk
+        export ANDROID_NDK_ROOT=/home/runner/.buildozer/android/platform/android-ndk-r25b
+        export ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r25b
+        
+        # Clean old builds
+        rm -rf bin/ .buildozer/
+        mkdir -p bin/
+        
+        echo "=== 开始构建 APK (20-40分钟) ==="
+        timeout 2700 buildozer android debug || BUILD_EXIT=$?
+        
+        if [ -f "bin/"*.apk 2>/dev/null ]; then
+          echo "=== APK 构建成功 ==="
+          ls -lh bin/*.apk
+        else
+          echo "=== APK 构建失败，尝试备用方案 ==="
+          exit 1
+        fi
+
+    - name: Verify APK authenticity
+      run: |
+        APK_FILE=$(ls bin/*.apk 2>/dev/null | head -1)
+        if [ -f "$APK_FILE" ]; then
+          echo "=== APK 真实性验证 ==="
+          echo "APK: $APK_FILE"
+          ls -lh "$APK_FILE"
+          
+          # Check APK structure
+          DEX_COUNT=$(unzip -l "$APK_FILE" 2>/dev/null | grep -c "classes.dex" || echo 0)
+          SO_COUNT=$(unzip -l "$APK_FILE" 2>/dev/null | grep -c "\.so" || echo 0)
+          
+          echo "DEX 文件数量: $DEX_COUNT"
+          echo "SO 库文件数量: $SO_COUNT"
+          
+          if [ "$DEX_COUNT" -gt 0 ]; then
+            echo "✅ APK 包含真实的 DEX 编译产物"
+          else
+            echo "⚠️ APK 可能不包含 DEX 文件"
+          fi
+        else
+          echo "❌ 未找到 APK 文件"
+          exit 1
+        fi
+
+    - name: Upload APK
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: clock2-kivy-real-apk
+        path: bin/*.apk
+        retention-days: 30
+
+    timeout-minutes: 120
