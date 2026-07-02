@@ -37,34 +37,36 @@ jobs:
         run: |
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
 
-      - name: Download Android SDK commandlinetools
-        run: |
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdline-tools.zip
-          echo "Downloaded cmdline-tools"
-
-      - name: Set up buildozer SDK with cmdline-tools
+      - name: Download and set up Android SDK cmdline-tools
         run: |
           BUILDOZER_SDK=$HOME/.buildozer/android/platform/android-sdk
-          mkdir -p $BUILDOZER_SDK
 
-          # Extract cmdline-tools: unzip creates cmdline-tools/cmdline-tools/
-          unzip -q /tmp/cmdline-tools.zip -d $BUILDOZER_SDK/
-          # Rename inner cmdline-tools dir to "latest"
-          if [ -d "$BUILDOZER_SDK/cmdline-tools/cmdline-tools" ]; then
-            mv $BUILDOZER_SDK/cmdline-tools/cmdline-tools $BUILDOZER_SDK/cmdline-tools/latest
-          fi
+          # Download cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdline-tools.zip
+
+          # Clean up any previous partial install
+          rm -rf $BUILDOZER_SDK/cmdline-tools
+
+          # Extract to temp dir
+          unzip -q /tmp/cmdline-tools.zip -d /tmp/
+          # Zip structure: cmdline-tools/bin/sdkmanager (no "latest" subfolder in zip)
+          # Create the standard "latest" layout: cmdline-tools/latest/bin/sdkmanager
+          mkdir -p $BUILDOZER_SDK/cmdline-tools
+          mv /tmp/cmdline-tools $BUILDOZER_SDK/cmdline-tools/latest
+          rm -f /tmp/cmdline-tools.zip
+
+          echo "=== Verifying sdkmanager ==="
+          SDKMANAGER="$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager"
+          ls $SDKMANAGER && echo "✅ sdkmanager found at $SDKMANAGER" || echo "❌ NOT found"
 
           # Create legacy "tools" symlink for old buildozer versions that look for:
           #   ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
-          if [ -d "$BUILDOZER_SDK/cmdline-tools/latest" ] && [ ! -e "$BUILDOZER_SDK/tools" ]; then
+          if [ ! -e "$BUILDOZER_SDK/tools" ]; then
             ln -s $BUILDOZER_SDK/cmdline-tools/latest $BUILDOZER_SDK/tools
           fi
 
-          rm -f /tmp/cmdline-tools.zip
-
-          SDKMANAGER="$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager"
-          echo "sdkmanager path: $SDKMANAGER"
-          ls $SDKMANAGER 2>/dev/null && echo "✅ sdkmanager found" || echo "❌ sdkmanager NOT found"
+          echo "=== SDK structure ==="
+          ls $BUILDOZER_SDK/
 
       - name: Accept SDK licenses and install SDK components
         run: |
