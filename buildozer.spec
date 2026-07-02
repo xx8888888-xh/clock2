@@ -6,7 +6,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json,ttf,wav,mp3
 source.main = main.py
 version = 3.0.0
-requirements = python3==3.11,kivy==2.3.0,plyer,pillow,cython==0.29.36,requests
+requirements = python3==3.11.5,kivy==2.3.0,plyer,pillow,requests
 icon.filename = icon.png
 orientation = portrait
 fullscreen = 0
@@ -22,6 +22,8 @@ android.sdk = 34
 android.ndk = 25b
 android.ndk_api = 21
 android.archs = armeabi-v7a, arm64-v8a
+p4a.branch = v2024.01.21
+p4a.commit = v2024.01.21
 android.release_optimize = 1
 android.manifest_placeholders = [foregroundServiceType: "dataSync"]
 source.exclude_exts = spec
