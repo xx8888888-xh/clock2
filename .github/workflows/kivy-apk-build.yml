@@ -31,7 +31,8 @@ jobs:
             libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
             libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
             zlib1g-dev libncurses5-dev libreadline-dev libsqlite3-dev \
-            liblzma-dev libssl-dev wget
+            liblzma-dev libssl-dev wget autoconf automake libtool \
+            pkg-config libncurses-dev libffi-dev zlib1g-dev
 
       - name: Set JAVA_HOME
         run: |
