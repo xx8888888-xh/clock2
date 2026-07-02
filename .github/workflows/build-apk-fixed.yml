@@ -182,8 +182,18 @@ jobs:
           export ANDROID_NDK_ROOT=$ANDROID_NDK_HOME
 
           mkdir -p $HOME/.buildozer/android/platform
+          mkdir -p $HOME/.buildozer/android/platform
+          mkdir -p $HOME/.buildozer/android/platform
           ln -sf $ANDROID_SDK_ROOT $HOME/.buildozer/android/platform/android-sdk 2>/dev/null || true
+          # buildozer looks for sdkmanager at android-sdk/tools/bin/sdkmanager
+          # but we have it at cmdline-tools/latest/bin/sdkmanager
+          mkdir -p $HOME/.buildozer/android/platform/android-sdk/tools
+          ln -sf $HOME/android-sdk/cmdline-tools/latest $HOME/.buildozer/android/platform/android-sdk/tools/latest 2>/dev/null || true
+          ln -sf $HOME/android-sdk/cmdline-tools/latest/bin $HOME/.buildozer/android/platform/android-sdk/tools/bin 2>/dev/null || true
           ln -sf $ANDROID_NDK_ROOT $HOME/.buildozer/android/platform/android-ndk-r25b 2>/dev/null || true
+          echo "=== buildozer SDK paths ==="
+          ls -la $HOME/.buildozer/android/platform/
+          ls -la $HOME/.buildozer/android/platform/android-sdk/tools/
 
           echo "=== Environment ==="
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
