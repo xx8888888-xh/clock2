@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# React Native
+.android/
+.ios/
+android/app/build/
+ios/build/
+
+# Bundle
+android/app/src/main/assets/index.android.bundle
+
+# Metro
+.metro-health-check*
+
+# Debug
+npm-debug.log*
+yarn-error.log
+
+# macOS
+.DS_Store
+
+# Temporary
+*.keystore
