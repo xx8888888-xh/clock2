@@ -49,22 +49,20 @@ jobs:
           mkdir -p $BUILDOZER_SDK
 
           # Extract cmdline-tools to buildozer SDK dir
-          # New cmdline-tools structure: cmdline-tools/latest/bin/sdkmanager
+          # Zip structure: cmdline-tools/bin/sdkmanager at root
           unzip -q /tmp/cmdline-tools.zip -d $BUILDOZER_SDK/
-          if [ -d "$BUILDOZER_SDK/cmdline-tools" ] && [ ! -d "$BUILDOZER_SDK/cmdline-tools/latest" ]; then
-            mv $BUILDOZER_SDK/cmdline-tools/cmdline-tools $BUILDOZER_SDK/cmdline-tools/latest
-          fi
 
-          # Also create legacy "tools" symlink for buildozer compatibility
-          if [ -d "$BUILDOZER_SDK/cmdline-tools/latest" ] && [ ! -d "$BUILDOZER_SDK/tools" ]; then
-            ln -s $BUILDOZER_SDK/cmdline-tools/latest $BUILDOZER_SDK/tools
+          # Buildozer looks for tools/bin/sdkmanager, but zip puts it at cmdline-tools/bin/
+          # Create symlink: tools -> cmdline-tools
+          if [ -d "$BUILDOZER_SDK/cmdline-tools" ] && [ ! -L "$BUILDOZER_SDK/tools" ]; then
+            ln -s cmdline-tools $BUILDOZER_SDK/tools
           fi
 
           rm /tmp/cmdline-tools.zip
 
-          SDKMANAGER="$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager"
+          SDKMANAGER="$BUILDOZER_SDK/cmdline-tools/bin/sdkmanager"
           echo "sdkmanager path: $SDKMANAGER"
-          ls $BUILDOZER_SDK/cmdline-tools/latest/bin/ 2>/dev/null || echo "NOT FOUND"
+          ls $BUILDOZER_SDK/cmdline-tools/bin/ 2>/dev/null || echo "NOT FOUND"
 
       - name: Accept SDK licenses and pre-install SDK components for buildozer
         run: |
@@ -80,7 +78,7 @@ jobs:
           echo -e "601085b94cd77f0b54ff86406957099ebe79c4d6" > $BUILDOZER_SDK/licenses/android-sdk-preview-license
           echo "601085b94cd77f0b54ff86406957099ebe79c4d6" > $BUILDOZER_SDK/licenses/android-sdk-arm-dbt-license
 
-          SDKMANAGER="$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager"
+          SDKMANAGER="$BUILDOZER_SDK/cmdline-tools/bin/sdkmanager"
 
           # Pre-install SDK components (build-tools, platform, platform-tools)
           echo "=== Installing SDK components via sdkmanager ==="
