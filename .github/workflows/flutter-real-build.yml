@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: flutter-rewrite
+          ref: flutter-rewrite-clean
 
       - name: Setup Java JDK
         uses: actions/setup-java@v4
