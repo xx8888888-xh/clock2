@@ -23,10 +23,10 @@ jobs:
         echo "main.py 行数: $(wc -l < main.py)"
         echo "buildozer.spec: $(test -f buildozer.spec && echo '存在' || echo '缺失')"
 
-    - name: Set up Python 3.10
+    - name: Set up Python 3.11
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: '3.11'
 
     - name: Install system dependencies
       run: |
@@ -50,9 +50,7 @@ jobs:
         pip install --upgrade pip setuptools wheel
         pip install cython==0.29.36
         pip install kivy==2.3.0
-        pip install pillow
-        pip install plyer
-        pip install requests
+        pip install pillow plyer requests
         pip install buildozer==1.6.0
 
     - name: Setup Android SDK

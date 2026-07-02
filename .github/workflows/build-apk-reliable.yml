@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
 
 env:
-  PYTHON_VERSION: '3.10'
+  PYTHON_VERSION: '3.11'
   ANDROID_NDK_VERSION: 'r25b'
   KIVY_VERSION: '2.3.0'
   CYTHON_VERSION: '0.29.36'
