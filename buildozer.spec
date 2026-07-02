@@ -28,6 +28,7 @@ source.exclude_exts = spec
 source.exclude_dirs = tests, bin, venv, __pycache__, .git, .idea
 build.dir = ./.buildozer
 bin.dir = ./bin
+android.sdk_path = /home/runner/.buildozer/android/platform/android-sdk
 name = 宠物闹钟
 android.notification_channel = 宠物闹钟,宠物闹钟提醒
 android.window_soft_input_mode = adjustResize

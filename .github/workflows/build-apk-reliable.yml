@@ -1,0 +1,359 @@
+# ============================================================
+# Kivy APK 构建 - 完整可靠的 GitHub Actions 工作流
+#
+# 修复的核心问题：
+# 1. Android SDK 直接下载安装到 buildozer 期望的路径
+#    - buildozer 期望: ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+#    - 解决方案: 直接在 buildozer SDK 路径安装 cmdline-tools（不使用 symlink）
+# 2. android.sdk_path 在 buildozer.spec 中明确指定为绝对路径
+# 3. NDK r25b flags.cmake IN_LIST 补丁
+# 4. 完整 APK 验证（classes.dex + native libs）
+# ============================================================
+
+name: Build Android APK (Reliable SDK Setup)
+
+on:
+  push:
+    branches: [main, master, kivy-simple]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.10'
+  ANDROID_NDK_VERSION: 'r25b'
+  KIVY_VERSION: '2.3.0'
+  CYTHON_VERSION: '0.29.36'
+  BUILDOZER_VERSION: '1.6.0'
+  # buildozer 默认 SDK 路径（GitHub Actions runner 用户）
+  BUILDOZER_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+
+    steps:
+      # ─────────────────────────────────────────
+      # 1. 检出代码
+      # ─────────────────────────────────────────
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # ─────────────────────────────────────────
+      # 2. 安装系统依赖
+      # ─────────────────────────────────────────
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential git ffmpeg \
+            libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
+            libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
+            zlib1g-dev \
+            autoconf automake libtool pkg-config \
+            libffi-dev libssl-dev liblzma-dev \
+            unzip wget curl zipalign openjdk-17-jdk
+
+      # ─────────────────────────────────────────
+      # 3. Java 17
+      # ─────────────────────────────────────────
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # ─────────────────────────────────────────
+      # 4. Python 3.10
+      # ─────────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # ─────────────────────────────────────────
+      # 5. 安装 Python 依赖
+      # ─────────────────────────────────────────
+      - name: Install Python dependencies
+        run: |
+          python --version
+          pip install --upgrade pip setuptools wheel
+          pip install cython==${{ env.CYTHON_VERSION }}
+          pip install kivy==${{ env.KIVY_VERSION }}
+          pip install pillow plyer requests
+          pip install buildozer==${{ env.BUILDOZER_VERSION }}
+          pip list | grep -E "kivy|cython|buildozer|pillow"
+
+      # ─────────────────────────────────────────
+      # 6. Android SDK - 直接下载到 buildozer 期望路径
+      #
+      # buildozer 查找 sdkmanager 的路径:
+      #   $android_sdk_dir/tools/bin/sdkmanager
+      #
+      # 我们直接把 cmdline-tools 安装到 buildozer 的 SDK 目录，
+      # 不使用 symlink，避免路径解析问题
+      # ─────────────────────────────────────────
+      - name: Setup Android SDK at buildozer's expected path
+        run: |
+          SDK="${{ env.BUILDOZER_SDK_ROOT }}"
+          echo "SDK will be installed at: $SDK"
+          
+          # 创建 SDK 目录结构
+          mkdir -p "$SDK/cmdline-tools"
+          mkdir -p "$SDK/licenses"
+          mkdir -p "$SDK/tools/bin"
+          
+          # 创建 Android SDK 许可证
+          echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > "$SDK/licenses/android-sdk-license"
+          echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > "$SDK/licenses/android-sdk-preview-license"
+          echo -e "\nd975f751698a77b662f1254ddbeed3901e976f5a" > "$SDK/licenses/intel-android-extra-license"
+          
+          # 下载并安装 cmdline-tools (如果尚未安装)
+          if [ ! -d "$SDK/cmdline-tools/latest/bin" ]; then
+            echo "=== Downloading Android cmdline-tools ==="
+            cd /tmp
+            wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline.zip
+            unzip -q cmdline.zip
+            # 移动到 SDK 目录（不是 symlink，直接复制内容）
+            cp -r cmdline-tools "$SDK/cmdline-tools/latest"
+            rm -rf cmdline-tools cmdline.zip
+            echo "cmdline-tools installed"
+          else
+            echo "cmdline-tools already present"
+          fi
+          
+          # 验证 cmdline-tools/sdkmanager 存在
+          if [ -f "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
+            echo "✅ sdkmanager found at $SDK/cmdline-tools/latest/bin/sdkmanager"
+          else
+            echo "❌ sdkmanager NOT found!"
+            ls -la "$SDK/cmdline-tools/latest/bin/" 2>/dev/null || echo "Directory not found"
+            exit 1
+          fi
+          
+          # 接受许可证
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses \
+            --sdk_root="$SDK" > /dev/null 2>&1 || true
+          
+          # 创建 buildozer 期望的 tools/bin/sdkmanager 路径
+          # buildozer 内部查找 $android_sdk_dir/tools/bin/sdkmanager
+          mkdir -p "$SDK/tools/bin"
+          if [ ! -f "$SDK/tools/bin/sdkmanager" ]; then
+            ln -sf "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+                   "$SDK/tools/bin/sdkmanager"
+            echo "✅ Created tools/bin/sdkmanager -> cmdline-tools/latest/bin/sdkmanager"
+          fi
+          echo "=== SDK Ready ==="
+
+      # ─────────────────────────────────────────
+      # 7. 安装 SDK 组件：platform-tools, platforms, build-tools
+      # ─────────────────────────────────────────
+      - name: Install SDK components
+        run: |
+          SDK="${{ env.BUILDOZER_SDK_ROOT }}"
+          echo "=== Installing SDK components ==="
+          
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+            --sdk_root="$SDK" \
+            --install \
+            "platform-tools" \
+            "platforms;android-33" \
+            "platforms;android-34" \
+            "build-tools;34.0.0"
+          
+          echo "=== SDK contents ==="
+          ls "$SDK/"
+          ls "$SDK/platform-tools/" 2>/dev/null | head -5
+          ls "$SDK/platforms/" 2>/dev/null
+          ls "$SDK/build-tools/" 2>/dev/null
+
+      # ─────────────────────────────────────────
+      # 8. 安装 Android NDK r25b
+      # ─────────────────────────────────────────
+      - name: Setup Android NDK r25b
+        run: |
+          SDK="${{ env.BUILDOZER_SDK_ROOT }}"
+          NDK="$SDK/../android-ndk-${{ env.ANDROID_NDK_VERSION }}"
+          NDK_VERSION="${{ env.ANDROID_NDK_VERSION }}"
+          
+          mkdir -p "$(dirname $NDK)"
+          
+          if [ -d "$NDK" ]; then
+            echo "NDK already installed at $NDK"
+          else
+            echo "=== Downloading NDK $NDK_VERSION ==="
+            cd /tmp
+            wget -q "https://dl.google.com/android/repository/android-ndk-$NDK_VERSION-linux.zip" -O ndk.zip
+            unzip -q ndk.zip
+            mv "android-ndk-$NDK_VERSION" "$NDK"
+            rm ndk.zip
+          fi
+          
+          echo "=== NDK Ready ==="
+          ls "$NDK/"
+          echo "NDK_ROOT=$NDK"
+          echo "NDK_HOME=$NDK"
+          echo "NDK_ROOT=$NDK" >> $GITHUB_ENV
+          echo "NDK_HOME=$NDK" >> $GITHUB_ENV
+
+      # ─────────────────────────────────────────
+      # 9. 修复 NDK r25b flags.cmake IN_LIST 问题
+      # ─────────────────────────────────────────
+      - name: Patch NDK r25b CMake flags
+        run: |
+          NDK="$HOME/.buildozer/android/platform/android-ndk-${{ env.ANDROID_NDK_VERSION }}"
+          NDK_FLAGS="$NDK/build/cmake/flags.cmake"
+          
+          echo "=== Patching NDK flags.cmake ==="
+          if [ -f "$NDK_FLAGS" ]; then
+            echo "Checking for IN_LIST issue..."
+            if grep -q "IN_LIST.*ANDROID_SANITIZE" "$NDK_FLAGS"; then
+              echo "Found IN_LIST issue, creating patch..."
+              cp "$NDK_FLAGS" "$NDK_FLAGS.bak"
+              sed -i 's/if( arg IN_LIST ANDROID_SANITIZE )/# if( arg INLIST ANDROID_SANITIZE ) # PATCHED/' "$NDK_FLAGS"
+              echo "✅ Patched successfully"
+            else
+              echo "No IN_LIST issue found"
+            fi
+          else
+            echo "WARNING: flags.cmake not found at $NDK_FLAGS"
+          fi
+
+      # ─────────────────────────────────────────
+      # 10. 确认 buildozer.spec 存在
+      # ─────────────────────────────────────────
+      - name: Verify buildozer.spec
+        run: |
+          echo "=== Checking buildozer.spec ==="
+          if [ ! -f "buildozer.spec" ]; then
+            echo "ERROR: buildozer.spec not found!"
+            ls -la
+            exit 1
+          fi
+          echo "✅ buildozer.spec found"
+          grep -E "android\.(sdk|ndk|api)" buildozer.spec
+          grep "android.sdk_path" buildozer.spec || echo "(no sdk_path override)"
+
+      # ─────────────────────────────────────────
+      # 11. 构建 APK
+      # ─────────────────────────────────────────
+      - name: Build APK with buildozer
+        env:
+          BUILDOZER_WARN_ON_ROOT: '0'
+        run: |
+          SDK="${{ env.BUILDOZER_SDK_ROOT }}"
+          NDK="$HOME/.buildozer/android/platform/android-ndk-${{ env.ANDROID_NDK_VERSION }}"
+          
+          export ANDROID_SDK_ROOT="$SDK"
+          export ANDROID_NDK_ROOT="$NDK"
+          export ANDROID_NDK_HOME="$NDK"
+          export PATH="$SDK/cmdline-tools/latest/bin:$SDK/platform-tools:$PATH"
+          
+          echo "=== Environment ==="
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "ANDROID_NDK_ROOT=$ANDROID_NDK_ROOT"
+          echo "python=$(which python)"
+          
+          # 验证 sdkmanager 在正确位置
+          echo ""
+          echo "=== Verifying sdkmanager ==="
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          echo "Looking for: $SDKMANAGER"
+          if [ -f "$SDKMANAGER" ]; then
+            echo "✅ sdkmanager found"
+            "$SDKMANAGER" --list 2>&1 | head -3 || true
+          else
+            echo "❌ sdkmanager NOT found!"
+            echo "SDK directory contents:"
+            ls -la "$SDK/"
+            exit 1
+          fi
+          
+          # 清理旧构建
+          rm -rf bin/ .buildozer/
+          mkdir -p bin/
+          
+          echo ""
+          echo "=== Build started: $(date) ==="
+          timeout 2700 buildozer android debug 2>&1 | tee buildozer_full.log
+          BUILD_EXIT_CODE=$?
+          echo "=== Build finished: $(date), exit code: $BUILD_EXIT_CODE ==="
+          
+          echo ""
+          echo "=== Last 60 lines of build log ==="
+          tail -60 buildozer_full.log
+
+      # ─────────────────────────────────────────
+      # 12. 验证 APK
+      # ─────────────────────────────────────────
+      - name: Verify APK
+        run: |
+          echo "=== Verifying APK ==="
+          APK_FILE=$(find bin/ -name "*.apk" -type f 2>/dev/null | head -1)
+          
+          if [ -z "$APK_FILE" ]; then
+            echo "ERROR: No APK found in bin/"
+            ls -la bin/ 2>/dev/null || echo "bin/ does not exist"
+            cat buildozer_full.log 2>/dev/null | tail -40
+            exit 1
+          fi
+          
+          echo "APK: $APK_FILE"
+          ls -lh "$APK_FILE"
+          
+          SIZE=$(stat -c%s "$APK_FILE")
+          SIZE_MB=$((SIZE / 1024 / 1024))
+          echo "Size: $SIZE bytes ($SIZE_MB MB)"
+          
+          # ZIP header
+          HEADER=$(head -c 4 "$APK_FILE" | xxd | head -1)
+          if echo "$HEADER" | grep -q "504b"; then
+            echo "✅ ZIP header valid (APK is a valid ZIP archive)"
+          else
+            echo "❌ Invalid ZIP header"
+            exit 1
+          fi
+          
+          # DEX files (most important)
+          DEX_COUNT=$(unzip -l "$APK_FILE" 2>/dev/null | grep -c "classes.dex" || echo "0")
+          echo "classes.dex count: $DEX_COUNT"
+          
+          if [ "$DEX_COUNT" -eq 0 ]; then
+            echo "❌ No classes.dex found — APK is FAKE!"
+            unzip -l "$APK_FILE" 2>/dev/null | head -20
+            exit 1
+          fi
+          echo "✅ APK contains $DEX_COUNT DEX file(s) — real compiled app"
+          
+          # Native libraries
+          SO_COUNT=$(unzip -l "$APK_FILE" 2>/dev/null | grep -c "\.so" || echo "0")
+          echo "Native .so libraries: $SO_COUNT"
+          
+          echo ""
+          echo "========================================"
+          echo "✅ APK VERIFICATION PASSED"
+          echo "   Size:     $SIZE_MB MB"
+          echo "   DEX:      $DEX_COUNT file(s)"
+          echo "   Native:   $SO_COUNT .so file(s)"
+          echo "========================================"
+
+      # ─────────────────────────────────────────
+      # 13. 上传产物
+      # ─────────────────────────────────────────
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clock2-kivy-apk-${{ github.sha }}
+          path: |
+            bin/*.apk
+            buildozer_full.log
+          retention-days: 30
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ github.sha }}
+          path: buildozer_full.log
+          retention-days: 30
