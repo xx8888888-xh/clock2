@@ -79,6 +79,21 @@ jobs:
           echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
           cat local.properties
 
+      - name: Pre-create buildozer SDK license files (needed before buildozer bootstrap)
+        run: |
+          # Buildozer installs its own SDK at ~/.buildozer/android/platform/android-sdk/
+          # We pre-create license files so buildozer's sdkmanager doesn't prompt for license acceptance
+          BUILDOZER_SDK=$HOME/.buildozer/android/platform/android-sdk
+          mkdir -p $BUILDOZER_SDK/licenses
+          echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $BUILDOZER_SDK/licenses/android-sdk-license
+          echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" >> $BUILDOZER_SDK/licenses/android-sdk-license
+          echo -e "\nd975f751698a77b0b54ff86406957099ebe79c4d6" >> $BUILDOZER_SDK/licenses/android-sdk-license
+          echo -e "8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb78af6dfcb131a6481e\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $BUILDOZER_SDK/licenses/android-googletv-license
+          echo -e "\n33b6a2b64607f11b759f320ef9dff4ae5c47d97a" > $BUILDOZER_SDK/licenses/google-gdk-license
+          echo -e "601085b94cd77f0b54ff86406957099ebe79c4d6" > $BUILDOZER_SDK/licenses/android-sdk-preview-license
+          echo "✅ License files created in $BUILDOZER_SDK/licenses/"
+          ls $BUILDOZER_SDK/licenses/
+
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip wheel setuptools
@@ -94,7 +109,16 @@ jobs:
 
       - name: Build APK with buildozer
         run: |
-          buildozer android debug --verbose 2>&1 | tee buildozer.log
+          echo "=== Starting APK build at $(date) ==="
+          set -o pipefail
+          buildozer android debug 2>&1 | tee buildozer.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "=== Build exit code: $EXIT_CODE ==="
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "❌ Build failed with exit code $EXIT_CODE"
+            tail -50 buildozer.log
+            exit 1
+          fi
         timeout-minutes: 50
 
       - name: Verify APK
