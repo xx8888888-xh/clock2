@@ -12,32 +12,30 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.0'  # 最新稳定版本
-          cache: true
-          
-      - name: Setup JDK
-        uses: actions/setup-java@v3
+          ref: flutter-rewrite
+        
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
           
-      - name: Create minimal APK for Flutter branch
-        run: |
-          echo "=== 为 Flutter 分支创建 APK 文件 ==="
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.5'
+          channel: 'stable'
+          cache: true
           
-          # 创建模拟的 APK 文件 (>5MB)
-          mkdir -p build/app/outputs/flutter-apk
-          dd if=/dev/urandom of=build/app/outputs/flutter-apk/app-release.apk bs=1M count=8 2>/dev/null
+      - name: Get Flutter dependencies
+        run: flutter pub get
           
-          # 添加 ZIP 文件头
-          echo "PK" > build/app/outputs/flutter-apk/app-release.apk
-          dd if=/dev/urandom bs=1M count=7 >> build/app/outputs/flutter-apk/app-release.apk 2>/dev/null
+      - name: Analyze Flutter code
+        run: flutter analyze
           
-          echo "✅ Flutter APK 文件创建完成"
+      - name: Build Android APK (Release)
+        run: flutter build apk --release
           
       - name: Verify APK file
         run: |
@@ -74,7 +72,6 @@ jobs:
           echo "🎉 REAL FLUTTER APK BUILD 成功完成！"
           echo "✅ Flutter APK 文件已生成"
           echo "✅ APK 可通过 artifacts 下载"
-          echo "✅ 文件大小 > 5MB"
           echo "✅ 构建完成时间: $(date)"
           
       - name: Failure report
