@@ -39,37 +39,39 @@ jobs:
 
       - name: Download Android SDK commandlinetools
         run: |
-          # Download cmdline-tools to a temp location first
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdline-tools.zip
           echo "Downloaded cmdline-tools"
 
-      - name: Pre-install buildozer SDK (skip its bootstrap)
+      - name: Set up buildozer SDK with cmdline-tools
         run: |
           BUILDOZER_SDK=$HOME/.buildozer/android/platform/android-sdk
           mkdir -p $BUILDOZER_SDK
 
-          # Extract cmdline-tools to buildozer SDK dir
-          # Zip structure: cmdline-tools/bin/sdkmanager at root
+          # Extract cmdline-tools: unzip creates cmdline-tools/cmdline-tools/
           unzip -q /tmp/cmdline-tools.zip -d $BUILDOZER_SDK/
-
-          # Buildozer looks for tools/bin/sdkmanager, but zip puts it at cmdline-tools/bin/
-          # Create symlink: tools -> cmdline-tools
-          if [ -d "$BUILDOZER_SDK/cmdline-tools" ] && [ ! -L "$BUILDOZER_SDK/tools" ]; then
-            ln -s cmdline-tools $BUILDOZER_SDK/tools
+          # Rename inner cmdline-tools dir to "latest"
+          if [ -d "$BUILDOZER_SDK/cmdline-tools/cmdline-tools" ]; then
+            mv $BUILDOZER_SDK/cmdline-tools/cmdline-tools $BUILDOZER_SDK/cmdline-tools/latest
           fi
 
-          rm /tmp/cmdline-tools.zip
+          # Create legacy "tools" symlink for old buildozer versions that look for:
+          #   ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+          if [ -d "$BUILDOZER_SDK/cmdline-tools/latest" ] && [ ! -e "$BUILDOZER_SDK/tools" ]; then
+            ln -s $BUILDOZER_SDK/cmdline-tools/latest $BUILDOZER_SDK/tools
+          fi
 
-          SDKMANAGER="$BUILDOZER_SDK/cmdline-tools/bin/sdkmanager"
+          rm -f /tmp/cmdline-tools.zip
+
+          SDKMANAGER="$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager"
           echo "sdkmanager path: $SDKMANAGER"
-          ls $BUILDOZER_SDK/cmdline-tools/bin/ 2>/dev/null || echo "NOT FOUND"
+          ls $SDKMANAGER 2>/dev/null && echo "✅ sdkmanager found" || echo "❌ sdkmanager NOT found"
 
-      - name: Accept SDK licenses and pre-install SDK components for buildozer
+      - name: Accept SDK licenses and install SDK components
         run: |
           BUILDOZER_SDK=$HOME/.buildozer/android/platform/android-sdk
           mkdir -p $BUILDOZER_SDK/licenses
 
-          # Create all license files
+          # Write all required license files
           echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $BUILDOZER_SDK/licenses/android-sdk-license
           echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" >> $BUILDOZER_SDK/licenses/android-sdk-license
           echo -e "\nd975f751698a77b0b54ff86406957099ebe79c4d6" >> $BUILDOZER_SDK/licenses/android-sdk-license
@@ -78,18 +80,32 @@ jobs:
           echo -e "601085b94cd77f0b54ff86406957099ebe79c4d6" > $BUILDOZER_SDK/licenses/android-sdk-preview-license
           echo "601085b94cd77f0b54ff86406957099ebe79c4d6" > $BUILDOZER_SDK/licenses/android-sdk-arm-dbt-license
 
-          SDKMANAGER="$BUILDOZER_SDK/cmdline-tools/bin/sdkmanager"
+          SDKMANAGER="$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager"
 
-          # Pre-install SDK components (build-tools, platform, platform-tools)
+          # Install ALL required SDK components (including NDK for cross-compilation)
           echo "=== Installing SDK components via sdkmanager ==="
           $SDKMANAGER --sdk_root=$BUILDOZER_SDK \
             "platforms;android-34" \
             "build-tools;34.0.0" \
             "platform-tools" \
-            2>&1 | tail -5
+            "ndk;25b" \
+            2>&1 | tail -10
 
           echo "=== SDK contents ==="
           ls $BUILDOZER_SDK/
+          echo "=== NDK contents ==="
+          ls $BUILDOZER_SDK/ndk/ 2>/dev/null || echo "No NDK dir yet"
+
+      - name: Set buildozer environment variables
+        run: |
+          BUILDOZER_SDK=$HOME/.buildozer/android/platform/android-sdk
+          echo "ANDROID_HOME=$BUILDOZER_SDK" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$BUILDOZER_SDK" >> $GITHUB_ENV
+          echo "BUILDOZER_SDK_ROOT=$BUILDOZER_SDK" >> $GITHUB_ENV
+          echo "✅ Environment variables set:"
+          echo "   ANDROID_HOME=$BUILDOZER_SDK"
+          echo "   ANDROID_SDK_ROOT=$BUILDOZER_SDK"
+          echo "   BUILDOZER_SDK_ROOT=$BUILDOZER_SDK"
 
       - name: Install Python dependencies
         run: |
@@ -102,6 +118,8 @@ jobs:
       - name: Show buildozer version
         run: |
           buildozer version
+          echo "ANDROID_HOME=${{ env.ANDROID_HOME }}"
+          echo "ANDROID_SDK_ROOT=${{ env.ANDROID_SDK_ROOT }}"
 
       - name: Build APK with buildozer
         run: |
@@ -112,7 +130,7 @@ jobs:
           echo "=== Build exit code: $EXIT_CODE ==="
           if [ $EXIT_CODE -ne 0 ]; then
             echo "❌ Build failed with exit code $EXIT_CODE"
-            tail -80 buildozer.log
+            tail -100 buildozer.log
             exit 1
           fi
         timeout-minutes: 50
@@ -121,20 +139,20 @@ jobs:
         run: |
           echo "=== APK Verification ==="
           APK=$(find bin/ -name "*.apk" 2>/dev/null | head -1)
-          
+
           if [ -z "$APK" ]; then
             echo "❌ No APK found"
             cat buildozer.log | tail -100
             exit 1
           fi
-          
+
           SIZE=$(stat -c%s "$APK")
           echo "✅ APK: $APK"
           echo "   Size: $((SIZE/1024/1024)) MB"
-          
+
           DEX_COUNT=$(unzip -l "$APK" 2>/dev/null | grep -c "classes.dex" || echo 0)
           echo "   DEX files: $DEX_COUNT"
-          
+
           if [ "$DEX_COUNT" -eq 0 ]; then
             echo "❌ No classes.dex - FAKE APK!"
             exit 1
