@@ -1,3 +1,0 @@
-触发确保成功的APK构建 - Fri May  8 08:19:17 PM CST 2026
-分支: kivy-simple
-工作流: kivy-simple_build_apk_guaranteed.yml

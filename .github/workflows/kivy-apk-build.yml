@@ -1,0 +1,128 @@
+name: Kivy APK Build
+
+on:
+  push:
+    branches: [kivy-simple]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install system dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            python3-pip build-essential ccache git zip unzip \
+            openjdk-17-jdk python3-dev ffmpeg \
+            libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
+            libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
+            zlib1g-dev libncurses5-dev libreadline-dev libsqlite3-dev \
+            liblzma-dev libssl-dev wget coreutils
+
+      - name: Set JAVA_HOME
+        run: echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
+
+      - name: Set up Android SDK
+        run: |
+          ANDROID_SDK_ROOT=$HOME/android-sdk
+          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "PATH=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH" >> $GITHUB_ENV
+
+          # Download commandline-tools
+          cd $HOME
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip
+          mv cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
+          rm cmdline-tools.zip
+
+          echo "=== SDK Manager installed ==="
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null 2>&1 || true
+          
+          # Install required SDK components
+          echo "=== Installing Android SDK components ==="
+          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
+            "platforms;android-34" \
+            "build-tools;34.0.0" \
+            "ndk;25.2.9519653" \
+            "platform-tools" \
+            2>&1 | tail -5
+          
+          echo "=== SDK setup complete ==="
+          ls $ANDROID_SDK_ROOT/
+
+      - name: Create local.properties
+        run: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          cat local.properties
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip wheel setuptools
+          pip install cython==0.29.36
+          pip install kivy==2.3.0
+          pip install pillow
+          pip install buildozer
+
+      - name: Show buildozer version
+        run: |
+          buildozer version
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+
+      - name: Build APK with buildozer
+        run: |
+          buildozer android debug --verbose 2>&1 | tee buildozer.log
+        timeout-minutes: 50
+
+      - name: Verify APK
+        run: |
+          echo "=== APK Verification ==="
+          APK=$(find bin/ -name "*.apk" 2>/dev/null | head -1)
+          
+          if [ -z "$APK" ]; then
+            echo "❌ No APK found"
+            cat buildozer.log | tail -100
+            exit 1
+          fi
+          
+          SIZE=$(stat -c%s "$APK")
+          echo "✅ APK: $APK"
+          echo "   Size: $((SIZE/1024/1024)) MB"
+          
+          DEX_COUNT=$(unzip -l "$APK" 2>/dev/null | grep -c "classes.dex" || echo 0)
+          echo "   DEX files: $DEX_COUNT"
+          
+          if [ "$DEX_COUNT" -eq 0 ]; then
+            echo "❌ No classes.dex - FAKE APK!"
+            exit 1
+          fi
+          echo "✅ APK is REAL"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: clock2-kivy-apk
+          path: bin/*.apk
+          retention-days: 7
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clock2-build-log
+          path: buildozer.log
+          retention-days: 7
