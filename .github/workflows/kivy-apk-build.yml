@@ -40,7 +40,6 @@ jobs:
 
       - name: Setup Android SDK
         run: |
-          export JAVA_HOME=$JAVA_HOME
           export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
           mkdir -p $ANDROID_SDK_ROOT
           mkdir -p $ANDROID_SDK_ROOT/licenses
@@ -70,8 +69,6 @@ jobs:
 
           # Install SDK components
           echo "=== Installing SDK components ==="
-          echo "JAVA_HOME=$JAVA_HOME"
-          java -version 2>&1
           $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT \
             "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
@@ -80,7 +77,6 @@ jobs:
 
       - name: Setup Android NDK r25b
         run: |
-          export JAVA_HOME=$JAVA_HOME
           export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
           NDK_DIR=$HOME/.buildozer/android/platform/android-ndk-r25b
 
@@ -94,21 +90,6 @@ jobs:
             echo "NDK downloaded to $NDK_DIR"
           else
             echo "NDK already present at $NDK_DIR"
-          fi
-
-          # Patch NDK flags.cmake to fix CMake IN_LIST compatibility bug
-          # This bug causes freetype configure to fail with "C compiler cannot create executables"
-          NDK_FLAGS=$NDK_DIR/build/cmake/flags.cmake
-          if [ -f "$NDK_FLAGS" ]; then
-            if grep -q "IN_LIST" "$NDK_FLAGS"; then
-              echo "=== Patching NDK flags.cmake ==="
-              sed -i 's/if( arg IN_LIST ANDROID_SANITIZE )/# PATCHED: IN_LIST issue/' "$NDK_FLAGS"
-              echo "✅ NDK flags.cmake patched"
-            else
-              echo "NDK flags.cmake already patched or no IN_LIST found"
-            fi
-          else
-            echo "⚠️ NDK flags.cmake not found at $NDK_FLAGS"
           fi
 
       - name: Install Python dependencies
@@ -140,8 +121,7 @@ jobs:
           echo "ANDROID_NDK_ROOT=$ANDROID_NDK_ROOT"
 
           # Build
-          timeout 2700 buildozer android debug 2>&1 | tee buildozer.log
-          BUILD_EXIT=$?
+          timeout 2700 buildozer android debug || BUILD_EXIT=$?
 
           echo "=== Build exit code: $BUILD_EXIT ==="
 
