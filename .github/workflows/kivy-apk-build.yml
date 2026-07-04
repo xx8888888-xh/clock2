@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-apk:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 60
 
     steps:
@@ -19,173 +19,156 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Install system dependencies
         run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update -qq
+          sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             python3-pip build-essential ccache git zip unzip \
-            openjdk-17-jdk python3-dev ffmpeg \
+            openjdk-17-jdk ffmpeg \
             libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
             libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
             zlib1g-dev libncurses5-dev libreadline-dev libsqlite3-dev \
-            liblzma-dev libssl-dev wget autoconf automake libtool \
-            pkg-config libncurses-dev libffi-dev zlib1g-dev
+            liblzma-dev libssl-dev wget cmake \
+            autoconf automake libtool pkg-config libffi-dev
 
-      - name: Set JAVA_HOME
+      - name: Setup Android SDK
         run: |
-          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
-
-      - name: Download and set up Android SDK cmdline-tools
-        run: |
-          BUILDOZER_SDK=$HOME/.buildozer/android/platform/android-sdk
-
-          # Download cmdline-tools
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmdline-tools.zip
-
-          # Clean up any previous partial install
-          rm -rf $BUILDOZER_SDK/cmdline-tools
-
-          # Extract to temp dir
-          unzip -q /tmp/cmdline-tools.zip -d /tmp/
-          # Zip structure: cmdline-tools/bin/sdkmanager (no "latest" subfolder in zip)
-          # Create the standard "latest" layout: cmdline-tools/latest/bin/sdkmanager
-          mkdir -p $BUILDOZER_SDK/cmdline-tools
-          mv /tmp/cmdline-tools $BUILDOZER_SDK/cmdline-tools/latest
-          rm -f /tmp/cmdline-tools.zip
-
-          echo "=== Verifying sdkmanager ==="
-          SDKMANAGER="$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager"
-          ls $SDKMANAGER && echo "✅ sdkmanager found at $SDKMANAGER" || echo "❌ NOT found"
-
-          # Create legacy "tools" symlink for old buildozer versions that look for:
-          #   ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
-          if [ ! -e "$BUILDOZER_SDK/tools" ]; then
-            ln -s $BUILDOZER_SDK/cmdline-tools/latest $BUILDOZER_SDK/tools
-          fi
-
-          echo "=== SDK structure ==="
-          ls $BUILDOZER_SDK/
-
-      - name: Accept SDK licenses and install SDK components
-        run: |
-          BUILDOZER_SDK=$HOME/.buildozer/android/platform/android-sdk
-          mkdir -p $BUILDOZER_SDK/licenses
+          export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+          mkdir -p $ANDROID_SDK_ROOT
+          mkdir -p $ANDROID_SDK_ROOT/licenses
 
           # Write all required license files
-          echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $BUILDOZER_SDK/licenses/android-sdk-license
-          echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" >> $BUILDOZER_SDK/licenses/android-sdk-license
-          echo -e "\nd975f751698a77b0b54ff86406957099ebe79c4d6" >> $BUILDOZER_SDK/licenses/android-sdk-license
-          echo -e "8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb78af6dfcb131a6481e\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $BUILDOZER_SDK/licenses/android-googletv-license
-          echo -e "33b6a2b64607f11b759f320ef9dff4ae5c47d97a" > $BUILDOZER_SDK/licenses/google-gdk-license
-          echo -e "601085b94cd77f0b54ff86406957099ebe79c4d6" > $BUILDOZER_SDK/licenses/android-sdk-preview-license
-          echo "601085b94cd77f0b54ff86406957099ebe79c4d6" > $BUILDOZER_SDK/licenses/android-sdk-arm-dbt-license
+          echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/android-sdk-license
+          echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" >> $ANDROID_SDK_ROOT/licenses/android-sdk-license
+          echo -e "\nd975f751698a77b0b54ff86406957099ebe79c4d6" >> $ANDROID_SDK_ROOT/licenses/android-sdk-license
+          echo -e "8933bad161af4178b1185d1a37fbf41ea5269c55\nd56f5187479451eabf01fb78af6dfcb131a6481e\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/android-googletv-license
+          echo -e "33b6a2b64607f11b759f320ef9dff4ae5c47d97a" > $ANDROID_SDK_ROOT/licenses/google-gdk-license
+          echo -e "601085b94cd77f0b54ff86406957099ebe79c4d6" > $ANDROID_SDK_ROOT/licenses/android-sdk-preview-license
+          echo "601085b94cd77f0b54ff86406957099ebe79c4d6" > $ANDROID_SDK_ROOT/licenses/android-sdk-arm-dbt-license
 
-          SDKMANAGER="$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager"
-
-          # Note: ndk;25b is NOT available in sdkmanager (package not found)
-          # Buildozer will download NDK r25b from Google's servers during bootstrap
-          # We patch flags.cmake in the build step to fix CMake IN_LIST compatibility
-          echo "=== Installing SDK components via sdkmanager ==="
-          # Use set +e so sdkmanager failures don't abort the step
-          # (buildozer will handle any missing SDK components itself)
-          set +e
-          $SDKMANAGER --sdk_root=$BUILDOZER_SDK \
-            "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;34.0.0" \
-            2>&1
-          SDK_EXIT=$?
-          set -e
-          echo "sdkmanager exit code: $SDK_EXIT"
-          if [ $SDK_EXIT -ne 0 ]; then
-            echo "⚠️ sdkmanager returned non-zero but continuing - buildozer will bootstrap SDK"
+          # Install cmdline-tools
+          if [ ! -d "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" ]; then
+            cd /tmp
+            wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline.zip
+            unzip -q cmdline.zip
+            mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+            mv cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
+            rm -f cmdline.zip
           fi
 
-          echo "=== SDK contents ==="
-          ls $BUILDOZER_SDK/
+          # Create symlink for buildozer
+          mkdir -p $ANDROID_SDK_ROOT/tools/bin
+          ln -sf $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_ROOT/tools/bin/sdkmanager 2>/dev/null || true
 
-      - name: Set buildozer environment variables
+          # Install SDK components
+          echo "=== Installing SDK components ==="
+          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT \
+            "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+          echo "=== SDK ready ==="
+          ls $ANDROID_SDK_ROOT/
+
+      - name: Setup Android NDK r25b
         run: |
-          BUILDOZER_SDK=$HOME/.buildozer/android/platform/android-sdk
-          echo "ANDROID_HOME=$BUILDOZER_SDK" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=$BUILDOZER_SDK" >> $GITHUB_ENV
-          echo "BUILDOZER_SDK_ROOT=$BUILDOZER_SDK" >> $GITHUB_ENV
-          echo "✅ Environment variables set:"
-          echo "   ANDROID_HOME=$BUILDOZER_SDK"
-          echo "   ANDROID_SDK_ROOT=$BUILDOZER_SDK"
-          echo "   BUILDOZER_SDK_ROOT=$BUILDOZER_SDK"
+          export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+          NDK_DIR=$HOME/.buildozer/android/platform/android-ndk-r25b
+
+          if [ ! -d "$NDK_DIR" ]; then
+            echo "=== Downloading NDK r25b ==="
+            cd /tmp
+            wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -O ndk.zip
+            unzip -q ndk.zip
+            mv android-ndk-r25b $NDK_DIR
+            rm -f ndk.zip
+            echo "NDK downloaded to $NDK_DIR"
+          else
+            echo "NDK already present at $NDK_DIR"
+          fi
+
+          # Patch NDK flags.cmake to fix CMake IN_LIST compatibility bug
+          # This bug causes freetype configure to fail with "C compiler cannot create executables"
+          NDK_FLAGS=$NDK_DIR/build/cmake/flags.cmake
+          if [ -f "$NDK_FLAGS" ]; then
+            if grep -q "IN_LIST" "$NDK_FLAGS"; then
+              echo "=== Patching NDK flags.cmake ==="
+              sed -i 's/if( arg IN_LIST ANDROID_SANITIZE )/# PATCHED: IN_LIST issue/' "$NDK_FLAGS"
+              echo "✅ NDK flags.cmake patched"
+            else
+              echo "NDK flags.cmake already patched or no IN_LIST found"
+            fi
+          else
+            echo "⚠️ NDK flags.cmake not found at $NDK_FLAGS"
+          fi
 
       - name: Install Python dependencies
         run: |
-          pip install --upgrade pip wheel setuptools
+          pip install --upgrade pip setuptools wheel
           pip install cython==0.29.36
           pip install kivy==2.3.0
-          pip install pillow
-          pip install buildozer
-
-      - name: Show buildozer version
-        run: |
-          buildozer version
-          echo "ANDROID_HOME=${{ env.ANDROID_HOME }}"
-          echo "ANDROID_SDK_ROOT=${{ env.ANDROID_SDK_ROOT }}"
+          pip install pillow plyer
+          pip install buildozer==1.6.0
 
       - name: Build APK with buildozer
         env:
           BUILDOZER_WARN_ON_ROOT: '0'
+          ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
+          ANDROID_NDK_ROOT: /home/runner/.buildozer/android/platform/android-ndk-r25b
+          ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-r25b
         run: |
-          # Clean old builds to avoid stale cache issues
+          export ANDROID_SDK_ROOT=/home/runner/.buildozer/android/platform/android-sdk
+          export ANDROID_NDK_ROOT=/home/runner/.buildozer/android/platform/android-ndk-r25b
+          export ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r25b
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
+
+          # Clean old builds
           rm -rf bin/ .buildozer/
           mkdir -p bin/
 
           echo "=== Starting APK build at $(date) ==="
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "ANDROID_NDK_ROOT=$ANDROID_NDK_ROOT"
 
-          # Patch NDK flags.cmake if it exists (NDK is downloaded by buildozer bootstrap)
-          NDK_FLAGS="$HOME/.buildozer/android/platform/android-ndk-r25b/build/cmake/flags.cmake"
-          if [ -f "$NDK_FLAGS" ]; then
-            echo "Patching NDK flags.cmake to fix IN_LIST CMake compatibility issue..."
-            sed -i 's/if( arg IN_LIST ANDROID_SANITIZE )/# PATCHED: IN_LIST issue/' "$NDK_FLAGS"
-            echo "✅ NDK flags.cmake patched"
+          # Build
+          timeout 2700 buildozer android debug 2>&1 | tee buildozer.log
+          BUILD_EXIT=$?
+
+          echo "=== Build exit code: $BUILD_EXIT ==="
+
+          if [ -f "bin/"*.apk 2>/dev/null ]; then
+            echo "=== APK found ==="
+            ls -lh bin/*.apk
           else
-            echo "⚠️ NDK flags.cmake not found yet (buildozer may still be downloading NDK)"
-          fi
-
-          set -o pipefail
-          buildozer android debug 2>&1 | tee buildozer.log
-          EXIT_CODE=${PIPESTATUS[0]}
-          echo "=== Build exit code: $EXIT_CODE ==="
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "❌ Build failed with exit code $EXIT_CODE"
-            tail -100 buildozer.log
+            echo "=== APK build failed ==="
+            tail -50 buildozer.log
             exit 1
           fi
-        timeout-minutes: 90
 
-      - name: Verify APK
+      - name: Verify APK authenticity
         run: |
-          echo "=== APK Verification ==="
-          APK=$(find bin/ -name "*.apk" 2>/dev/null | head -1)
+          APK_FILE=$(ls bin/*.apk 2>/dev/null | head -1)
+          if [ -f "$APK_FILE" ]; then
+            echo "=== APK Verification ==="
+            SIZE=$(stat -c%s "$APK_FILE")
+            echo "APK: $APK_FILE"
+            echo "Size: $((SIZE/1024/1024)) MB"
 
-          if [ -z "$APK" ]; then
+            DEX_COUNT=$(unzip -l "$APK_FILE" 2>/dev/null | grep -c "classes.dex" || echo 0)
+            SO_COUNT=$(unzip -l "$APK_FILE" 2>/dev/null | grep -c "\.so" || echo 0)
+
+            echo "DEX files: $DEX_COUNT"
+            echo "SO files: $SO_COUNT"
+
+            if [ "$DEX_COUNT" -eq 0 ]; then
+              echo "❌ No classes.dex - FAKE APK!"
+              exit 1
+            fi
+            echo "✅ APK is REAL"
+          else
             echo "❌ No APK found"
-            cat buildozer.log | tail -100
             exit 1
           fi
-
-          SIZE=$(stat -c%s "$APK")
-          echo "✅ APK: $APK"
-          echo "   Size: $((SIZE/1024/1024)) MB"
-
-          DEX_COUNT=$(unzip -l "$APK" 2>/dev/null | grep -c "classes.dex" || echo 0)
-          echo "   DEX files: $DEX_COUNT"
-
-          if [ "$DEX_COUNT" -eq 0 ]; then
-            echo "❌ No classes.dex - FAKE APK!"
-            exit 1
-          fi
-          echo "✅ APK is REAL"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
