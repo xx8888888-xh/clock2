@@ -89,14 +89,23 @@ jobs:
           # Buildozer will download NDK r25b from Google's servers during bootstrap
           # We patch flags.cmake in the build step to fix CMake IN_LIST compatibility
           echo "=== Installing SDK components via sdkmanager ==="
+          # Use set +e so sdkmanager failures don't abort the step
+          # (buildozer will handle any missing SDK components itself)
+          set +e
           $SDKMANAGER --sdk_root=$BUILDOZER_SDK \
+            "platform-tools" \
             "platforms;android-34" \
             "build-tools;34.0.0" \
-            "platform-tools" \
-            2>&1 | tail -5
+            2>&1
+          SDK_EXIT=$?
+          set -e
+          echo "sdkmanager exit code: $SDK_EXIT"
+          if [ $SDK_EXIT -ne 0 ]; then
+            echo "⚠️ sdkmanager returned non-zero but continuing - buildozer will bootstrap SDK"
+          fi
 
           echo "=== SDK contents ==="
-          ls $BUILDOZER_SDK/"
+          ls $BUILDOZER_SDK/
 
       - name: Set buildozer environment variables
         run: |
@@ -123,17 +132,6 @@ jobs:
           echo "ANDROID_HOME=${{ env.ANDROID_HOME }}"
           echo "ANDROID_SDK_ROOT=${{ env.ANDROID_SDK_ROOT }}"
 
-      - name: Patch NDK flags.cmake (fix CMake IN_LIST compatibility issue)
-        run: |
-          NDK_FLAGS="$HOME/.buildozer/android/platform/android-ndk-r25b/build/cmake/flags.cmake"
-          if [ -f "$NDK_FLAGS" ]; then
-            echo "Patching $NDK_FLAGS to fix IN_LIST issue..."
-            sed -i 's/if( arg IN_LIST ANDROID_SANITIZE )/# PATCHED: IN_LIST issue/' "$NDK_FLAGS"
-            echo "✅ NDK flags.cmake patched"
-          else
-            echo "⚠️ NDK flags.cmake not found (NDK not yet downloaded by buildozer). Will patch after buildozer bootstrap."
-          fi
-
       - name: Build APK with buildozer
         env:
           BUILDOZER_WARN_ON_ROOT: '0'
@@ -144,11 +142,14 @@ jobs:
 
           echo "=== Starting APK build at $(date) ==="
 
-          # Patch NDK flags.cmake if it exists (may have been downloaded by buildozer bootstrap)
+          # Patch NDK flags.cmake if it exists (NDK is downloaded by buildozer bootstrap)
           NDK_FLAGS="$HOME/.buildozer/android/platform/android-ndk-r25b/build/cmake/flags.cmake"
           if [ -f "$NDK_FLAGS" ]; then
-            echo "Patching NDK flags.cmake..."
+            echo "Patching NDK flags.cmake to fix IN_LIST CMake compatibility issue..."
             sed -i 's/if( arg IN_LIST ANDROID_SANITIZE )/# PATCHED: IN_LIST issue/' "$NDK_FLAGS"
+            echo "✅ NDK flags.cmake patched"
+          else
+            echo "⚠️ NDK flags.cmake not found yet (buildozer may still be downloading NDK)"
           fi
 
           set -o pipefail
