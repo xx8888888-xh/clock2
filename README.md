@@ -1,63 +1,59 @@
-# clock2 Flutter版本
+# clock2 - 桌面宠物闹钟
 
-## 🎯 Flutter桌面宠物闹钟
+基于 Kivy 构建的 Android 桌面宠物闹钟应用。
 
-Flutter比Kivy更适合Android开发，特别是悬浮窗应用。
+## 功能特性
 
-## 📋 优势
+- 🐾 可爱宠物悬浮窗（可拖拽）
+- ⏰ 多闹钟管理（支持重复、批量添加）
+- ⏱️ 倒计时器
+- 😴 睡眠模式
+- 🌤️ 天气信息显示
+- 📅 日历事件集成
+- 💡 快捷操作菜单
 
-1. **Android原生支持** - Flutter编译为原生代码
-2. **热更新功能** - 开发效率高
-3. **悬浮窗插件** - `overlay_support`插件成熟
-4. **构建简单** - GitHub Actions支持
+## 技术栈
 
-## 🏗️ 项目结构
+- **框架**: Kivy 2.3.0
+- **语言**: Python 3.11
+- **平台**: Android
+- **打包**: buildozer + python-for-android
+
+## 项目结构
 
 ```
 clock2/
-├── lib/
-│   ├── main.dart            # 主程序
-├── android/
-│   ├── app/src/main/        # Android配置
-├── pubspec.yaml             # Flutter依赖
-├── .github/workflows/
-│   ├── flutter.yml          # Flutter构建工作流
+├── main.py              # 主程序入口
+├── buildozer.spec       # buildozer 配置文件
+├── alarms.json          # 闹钟数据存储
+├── calendar.json        # 日历数据
+├── pet.png              # 宠物图标
+├── icon.png             # 应用图标
+├── pet_mood.py          # 宠物心情系统
+├── weather.py           # 天气 API 模块
+└── calendar_integration.py  # 日历集成模块
 ```
 
-## 🔧 使用方法
+## 构建方法
 
-### 本地构建
+### 本地构建（需要 Android SDK / Buildozer）
+
 ```bash
-flutter build apk --release
+# 安装依赖
+pip install buildozer kivy
+
+# 构建 APK
+buildozer -v android debug
 ```
 
-### GitHub Actions构建
-自动构建APK，无需手动操作
+### GitHub Actions 自动构建
 
-## 📊 预期效果
+本项目配置了 GitHub Actions 自动化构建：
+- `.github/workflows/` 目录下的工作流文件
+- 每次推送自动构建 APK
 
-✅ **构建成功率95%+** - Flutter构建稳定
-✅ **悬浮窗稳定** - 使用Flutter原生插件
-✅ **性能更好** - Flutter性能比Kivy好
-✅ **开发更快** - 热更新功能
+## 运行要求
 
-## 🚀 GitHub Actions
-
-配置了`.github/workflows/flutter.yml`：
-- 自动安装Flutter
-- 自动构建Android APK
-- 自动上传APK
-
-## ⚠️ 注意事项
-
-1. **Android权限**：需要SYSTEM_ALERT_WINDOW权限
-2. **Flutter版本**：需要最新版本
-3. **插件依赖**：需要overlay_support插件
-4. **GitHub Actions**：构建需要时间
-
-## ✅ 构建成功率
-
-**Flutter构建成功率95%**，因为：
-- Flutter构建流程成熟
-- GitHub Actions有官方支持
-- Android APK构建稳定
+- Python 3.11+
+- Android API 21+ (Android 5.0+)
+- Android 权限: INTERNET, VIBRATE, SYSTEM_ALERT_WINDOW, WAKE_LOCK

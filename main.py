@@ -2140,6 +2140,8 @@ class DesktopPetAlarmApp(App):
             print(f"恢复窗口位置失败: {e}")
 
 
-# ==================== 新增功能方法 ====================
-
-
+# ==================== 应用入口 ====================
+if __name__ == '__main__':
+    from kivy.core.window import Window
+    Window.clearcolor = (1, 0.96, 0.94, 1)  # 柔和背景色
+    DesktopPetAlarmApp().run()
