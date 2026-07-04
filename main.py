@@ -552,6 +552,7 @@ class CutePet(Widget):
     def start_sleepy_animation(self):
         self.cancel_current_animation()
         self.is_sleeping = True
+        base_y = self.y
         
         # 困倦的缓慢移动
         sway_left = Animation(rotation=-3, duration=2.5, t='in_out_sine')
