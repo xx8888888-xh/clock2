@@ -3,8 +3,6 @@ name: React Native APK Build
 on:
   push:
     branches: [react-native-rewrite]
-  pull_request:
-    branches: [react-native-rewrite]
   workflow_dispatch:
 
 jobs:
@@ -35,25 +33,7 @@ jobs:
         working-directory: ./react-native-simple
         run: npm install
 
-      - name: Create assets directory
-        run: mkdir -p react-native-simple/android/app/src/main/assets
-
-      - name: Bundle JS for Android (Standalone)
-        working-directory: ./react-native-simple
-        run: npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res
-
-      - name: Verify bundle was created
-        run: |
-          if [ -f "react-native-simple/android/app/src/main/assets/index.android.bundle" ]; then
-            BUNDLE_SIZE=$(du -h "react-native-simple/android/app/src/main/assets/index.android.bundle" | cut -f1)
-            echo "✅ JS Bundle created! Size: $BUNDLE_SIZE"
-          else
-            echo "❌ JS Bundle NOT found!"
-            ls -la react-native-simple/android/app/src/main/assets/ 2>/dev/null || echo "assets dir empty"
-            exit 1
-          fi
-
-      - name: Build release APK (standalone, no Metro needed)
+      - name: Build release APK (Gradle bundles JS automatically)
         working-directory: ./react-native-simple/android
         env:
           REACT_NATIVE_DEV_SERVER_PORT: 0
@@ -69,8 +49,8 @@ jobs:
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
           echo "Found APK: $APK_PATH"
 
-      - name: Verify APK has bundle
-        run: unzip -l "${{ steps.find-apk.outputs.apk_path }}" | grep -E "index.android.bundle|assets" | head -5
+      - name: Verify bundle is inside APK
+        run: unzip -l "${{ steps.find-apk.outputs.apk_path }}" | grep -E "bundle|assets" | head -5
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
