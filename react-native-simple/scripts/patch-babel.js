@@ -95,12 +95,42 @@ if (fs.existsSync(file)) {
 
 // Patch 3: @babel/plugin-transform-classes inline-callSuper-helpers.js
 const icsFile = 'node_modules/@babel/plugin-transform-classes/lib/inline-callSuper-helpers.js';
-const icsOld = 'const id = file.scope.generateUidIdentifier("callSuper");';
-const icsNew = 'const id = (file.scope||(file.path&&file.path.scope)||{}).generateUidIdentifier?.("callSuper")||{type:"Identifier",name:"callSuper"};';
-if (patchFile(icsFile, icsOld, icsNew)) {
-  console.log('✅ Patched @babel/plugin-transform-classes inline-callSuper-helpers');
+if (fs.existsSync(icsFile)) {
+  let content = fs.readFileSync(icsFile, 'utf8');
+  let patched = false;
+
+  // Patch generateUidIdentifier call
+  const oldIcs1 = 'const id = file.scope.generateUidIdentifier("callSuper");';
+  const newIcs1 = 'const id = (file.scope||(file.path&&file.path.scope)||{}).generateUidIdentifier?.("callSuper")||{type:"Identifier",name:"callSuper"};';
+  if (content.includes(oldIcs1)) {
+    content = content.replace(oldIcs1, newIcs1);
+    patched = true;
+  }
+
+  // Fix unshiftContainer - handle null file.path
+  const oldIcs2 = 'const [fnPath] = file.path.unshiftContainer("body", [fn]);';
+  const newIcs2 = 'const [fnPath] = file.path ? file.path.unshiftContainer("body", [fn]) : null;';
+  if (content.includes(oldIcs2)) {
+    content = content.replace(oldIcs2, newIcs2);
+    patched = true;
+  }
+
+  // Fix registerDeclaration - handle null file.scope
+  const oldIcs3 = 'file.scope.registerDeclaration(fnPath);';
+  const newIcs3 = 'if (file.scope) file.scope.registerDeclaration(fnPath);';
+  if (content.includes(oldIcs3)) {
+    content = content.replace(oldIcs3, newIcs3);
+    patched = true;
+  }
+
+  if (patched) {
+    fs.writeFileSync(icsFile, content);
+    console.log('✅ Patched @babel/plugin-transform-classes inline-callSuper-helpers');
+  } else {
+    console.log('⚠️  inline-callSuper-helpers - not patched (already patched or not found)');
+  }
 } else {
-  console.log('⚠️  inline-callSuper-helpers - not patched (already patched or not found)');
+  console.log('⚠️  inline-callSuper-helpers file not found');
 }
 
 // Patch 4: @babel/traverse scope/index.js - handle null path
