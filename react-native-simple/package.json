@@ -2,20 +2,18 @@
   "name": "clock2-react-native",
   "version": "1.0.0",
   "private": true,
-  "scripts": {
-    "bundle:android": "npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res",
-    "build:debug": "cd android && ./gradlew assembleDebug"
-  },
   "dependencies": {
     "react": "18.2.0",
     "react-native": "0.73.6",
     "@react-native/metro-config": "0.73.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0",
-    "@babel/preset-env": "^7.20.0",
-    "@babel/runtime": "^7.20.0",
-    "metro-react-native-babel-preset": "0.73.0",
-    "@react-native-community/cli": "12.3.6"
+    "@babel/core": "7.18.0",
+    "@babel/preset-env": "7.18.0",
+    "@babel/runtime": "7.18.0",
+    "metro-react-native-babel-preset": "0.73.0"
+  },
+  "scripts": {
+    "postinstall": "node scripts/patch-babel.js"
   }
 }
