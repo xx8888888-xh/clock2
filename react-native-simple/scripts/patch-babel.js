@@ -1,31 +1,32 @@
 const fs = require('fs');
 const path = require('path');
 
-function patchFile(filePath, oldCode, newCode) {
+function patchFile(filePath, oldContent, newContent) {
   if (fs.existsSync(filePath)) {
     let content = fs.readFileSync(filePath, 'utf8');
-    if (content.includes(oldCode)) {
-      content = content.replace(oldCode, newCode);
+    if (content.includes(oldContent)) {
+      content = content.replace(oldContent, newContent);
       fs.writeFileSync(filePath, content);
-      console.log(`✅ Patched ${path.basename(filePath)}`);
       return true;
     }
   }
   return false;
 }
 
-// Patch 1: @babel/traverse Hub.addHelper() - return Identifier instead of throwing
+console.log('🔧 Applying Babel patches...\n');
+
+// Patch 1: @babel/traverse Hub.addHelper() - multi-line format
 const hubFile = 'node_modules/@babel/traverse/lib/hub.js';
-if (fs.existsSync(hubFile)) {
-  let content = fs.readFileSync(hubFile, 'utf8');
-  if (content.includes('throw new Error("Helpers are not supported by the default hub.")')) {
-    content = content.replace(
-      'addHelper() { throw new Error("Helpers are not supported by the default hub."); }',
-      'addHelper(name) { return { type: "Identifier", name: name }; }'
-    );
-    fs.writeFileSync(hubFile, content);
-    console.log('✅ Patched @babel/traverse Hub.addHelper()');
-  }
+const hubOld = `addHelper() {
+    throw new Error("Helpers are not supported by the default hub.");
+  }`;
+const hubNew = `addHelper(name) {
+    return { type: "Identifier", name: name };
+  }`;
+if (patchFile(hubFile, hubOld, hubNew)) {
+  console.log('✅ Patched @babel/traverse Hub.addHelper()');
+} else {
+  console.log('⚠️  @babel/traverse Hub.addHelper() - not patched (already patched or not found)');
 }
 
 // Patch 2: @babel/core File._addHelper() - handle null scope
@@ -33,15 +34,16 @@ const file = 'node_modules/@babel/core/lib/transformation/file/file.js';
 if (fs.existsSync(file)) {
   let content = fs.readFileSync(file, 'utf8');
   let patched = false;
-  
-  if (content.includes('this.declarations[name] = this.scope.generateUidIdentifier(name)')) {
-    content = content.replace(
-      'this.declarations[name] = this.scope.generateUidIdentifier(name);',
-      'const _s=this.scope||{}; const _g=_s.generateUidIdentifier||((n)=>({type:"Identifier",name:n})); this.declarations[name] = _g(name);'
-    );
+
+  // Patch generateUidIdentifier
+  const old1 = 'this.declarations[name] = this.scope.generateUidIdentifier(name);';
+  const new1 = 'const _s=this.scope||{}; const _g=_s.generateUidIdentifier||((n)=>({type:"Identifier",name:n})); this.declarations[name] = _g(name);';
+  if (content.includes(old1)) {
+    content = content.replace(old1, new1);
     patched = true;
   }
-  
+
+  // Patch getAllBindings
   if (content.includes('Object.keys(this.scope.getAllBindings())')) {
     content = content.replace(
       'Object.keys(this.scope.getAllBindings())',
@@ -49,7 +51,8 @@ if (fs.existsSync(file)) {
     );
     patched = true;
   }
-  
+
+  // Patch hasBinding
   if (content.includes('if (this.path.scope.hasBinding(name, true))')) {
     content = content.replace(
       'if (this.path.scope.hasBinding(name, true))',
@@ -57,31 +60,54 @@ if (fs.existsSync(file)) {
     );
     patched = true;
   }
-  
-  if (content.includes('this.path.unshiftContainer("body", nodes)')) {
-    content = content.replace(
-      'this.path.unshiftContainer("body", nodes);\n    this.path.get("body").forEach(path => {\n      if (nodes.indexOf(path.node) === -1) return;\n      if (path.isVariableDeclaration()) this.scope.registerDeclaration(path);\n    });',
-      'if (this.path) { this.path.unshiftContainer("body", nodes); this.path.get("body").forEach(path => { if (nodes.indexOf(path.node) === -1) return; if (this.scope && path.isVariableDeclaration()) this.scope.registerDeclaration(path); }); }'
-    );
+
+  // Patch unshiftContainer
+  const old2 = `this.path.unshiftContainer("body", nodes);
+    this.path.get("body").forEach(path => {
+      if (nodes.indexOf(path.node) === -1) return;
+      if (path.isVariableDeclaration()) this.scope.registerDeclaration(path);
+    });`;
+  const new2 = `if (this.path) { this.path.unshiftContainer("body", nodes); this.path.get("body").forEach(path => { if (nodes.indexOf(path.node) === -1) return; if (this.scope && path.isVariableDeclaration()) this.scope.registerDeclaration(path); }); }`;
+  if (content.includes(old2)) {
+    content = content.replace(old2, new2);
     patched = true;
   }
-  
-  if (patched) fs.writeFileSync(file, content);
-  console.log(patched ? '✅ Patched @babel/core File._addHelper()' : 'ℹ️  @babel/core already patched or not needed');
+
+  if (patched) {
+    fs.writeFileSync(file, content);
+    console.log('✅ Patched @babel/core File._addHelper()');
+  } else {
+    console.log('⚠️  @babel/core - not patched (already patched or not found)');
+  }
+} else {
+  console.log('⚠️  @babel/core file not found');
 }
 
 // Patch 3: @babel/plugin-transform-classes inline-callSuper-helpers.js
 const icsFile = 'node_modules/@babel/plugin-transform-classes/lib/inline-callSuper-helpers.js';
-if (fs.existsSync(icsFile)) {
-  let content = fs.readFileSync(icsFile, 'utf8');
-  if (content.includes('file.scope.generateUidIdentifier("callSuper")')) {
-    content = content.replace(
-      'file.scope.generateUidIdentifier("callSuper")',
-      '(file.scope||(file.path&&file.path.scope)||{}).generateUidIdentifier?.("callSuper")||{type:"Identifier",name:"callSuper"}'
-    );
-    fs.writeFileSync(icsFile, content);
-    console.log('✅ Patched @babel/plugin-transform-classes inline-callSuper-helpers');
+const icsOld = 'const id = file.scope.generateUidIdentifier("callSuper");';
+const icsNew = 'const id = (file.scope||(file.path&&file.path.scope)||{}).generateUidIdentifier?.("callSuper")||{type:"Identifier",name:"callSuper"};';
+if (patchFile(icsFile, icsOld, icsNew)) {
+  console.log('✅ Patched @babel/plugin-transform-classes inline-callSuper-helpers');
+} else {
+  console.log('⚠️  inline-callSuper-helpers - not patched (already patched or not found)');
+}
+
+// Patch 4: @babel/traverse scope/index.js - handle null path
+const scopeFile = 'node_modules/@babel/traverse/lib/scope/index.js';
+if (fs.existsSync(scopeFile)) {
+  let content = fs.readFileSync(scopeFile, 'utf8');
+  // The call at line 985: this.path.hub.addHelper(helperName) - already handled by Hub patch
+  // Check if addHelper call might need path.hub protection
+  const oldScope = 'return callExpression(this.path.hub.addHelper(helperName), args);';
+  const newScope = 'return callExpression(this.path&&this.path.hub&&this.path.hub.addHelper?this.path.hub.addHelper(helperName):{type:"Identifier",name:helperName}, args);';
+  if (content.includes(oldScope)) {
+    content = content.replace(oldScope, newScope);
+    fs.writeFileSync(scopeFile, content);
+    console.log('✅ Patched @babel/traverse scope/index.js');
+  } else {
+    console.log('ℹ️  @babel/traverse scope/index.js - no change needed');
   }
 }
 
-console.log('✨ Babel patches complete');
+console.log('\n✨ Babel patches complete');
