@@ -10,14 +10,12 @@
   },
   "dependencies": {
     "react": "18.2.0",
-    "react-native": "0.73.6",
-    "@react-native/metro-config": "0.73.0"
+    "react-native": "0.73.6"
   },
   "devDependencies": {
-    "@babel/core": "^7.23.0",
-    "@babel/preset-env": "^7.23.0",
-    "@babel/runtime": "^7.23.0",
-    "@babel/helpers": "^7.23.0",
-    "metro-react-native-babel-preset": "0.76.7"
+    "@babel/core": "^7.20.0",
+    "@babel/preset-env": "^7.20.0",
+    "@babel/runtime": "^7.20.0",
+    "metro-react-native-babel-preset": "0.73.0"
   }
 }
