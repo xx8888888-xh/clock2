@@ -47,35 +47,33 @@ jobs:
           GRADLE_EXIT=$?
           echo "=== GRADLE EXIT CODE: $GRADLE_EXIT ==="
           tail -30 /tmp/gradle.log
-          echo "=== APK FILES FOUND ==="
-          find . -name "*.apk" -type f 2>/dev/null | tee /tmp/apk-list.log || true
-          echo "=== APK BUILD COMPLETE ==="
-          if [ $GRADLE_EXIT -ne 0 ]; then
-            echo "GRADLE FAILED"
-            exit 1
-          fi
+          echo "=== ALL FILES IN OUTPUTS DIR ==="
+          find app/build/outputs -type f 2>/dev/null || echo "No outputs dir"
+          echo "=== ALL APK FILES IN PROJECT ==="
+          find /home/runner/work/clock2/clock2 -name "*.apk" -type f 2>/dev/null || echo "No APK found"
+
+      - name: Inspect build directory
+        run: |
+          echo "=== Contents of android/app/build ==="
+          ls -la react-native-simple/android/app/build/ 2>/dev/null || echo "No build dir"
+          echo "=== Contents of android/app/build/outputs ==="
+          ls -laR react-native-simple/android/app/build/outputs/ 2>/dev/null || echo "No outputs dir"
+          echo "=== Contents of android/app/build/intermediates ==="
+          ls react-native-simple/android/app/build/intermediates/ 2>/dev/null | head -20 || echo "No intermediates"
 
       - name: Find APK file
         id: find-apk
         run: |
-          echo "=== Searching for release APK ==="
-          find react-native-simple/android -name "*.apk" -type f 2>/dev/null || echo "No APK found"
-          APK_PATH=$(find react-native-simple/android -name "*.apk" -path "*/release/*" -type f 2>/dev/null | head -1)
-          if [ -z "$APK_PATH" ]; then
-            APK_PATH=$(find react-native-simple/android -name "*.apk" -type f 2>/dev/null | head -1)
-          fi
+          echo "=== Searching for APK ==="
+          find react-native-simple -name "*.apk" -type f 2>/dev/null
+          APK_PATH=$(find react-native-simple -name "*.apk" -type f 2>/dev/null | head -1)
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
           echo "APK_PATH=$APK_PATH"
-          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
-            echo "ERROR: APK file not found!"
-            echo "Contents of build dir:"
-            ls -la react-native-simple/android/app/build/outputs/apk/ 2>/dev/null || echo "No outputs dir"
+          if [ -z "$APK_PATH" ]; then
+            echo "ERROR: No APK found"
             exit 1
           fi
-          echo "Found APK: $APK_PATH ($(du -h $APK_PATH | cut -f1))"
-
-      - name: Verify bundle is inside APK
-        run: unzip -l "${{ steps.find-apk.outputs.apk_path }}" | grep -E "bundle|assets" | head -10
+          echo "Found: $APK_PATH ($(du -h $APK_PATH | cut -f1))"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
