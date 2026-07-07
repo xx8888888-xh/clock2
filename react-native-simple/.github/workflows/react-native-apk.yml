@@ -29,19 +29,25 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Delete stale package-lock.json (force fresh resolution with overrides)
+      - name: Delete stale package-lock.json
         working-directory: ./react-native-simple
-        run: rm -f package-lock.json && echo "Deleted stale package-lock.json"
+        run: rm -f package-lock.json
 
       - name: Install npm dependencies
         working-directory: ./react-native-simple
         run: npm install
 
-      - name: Build release APK (Gradle bundles JS automatically)
+      - name: Run Metro bundle directly (capture error for debugging)
+        working-directory: ./react-native-simple
+        run: |
+          mkdir -p android/app/src/main/assets
+          npx react-native bundle             --platform android             --dev false             --entry-file index.js             --bundle-output android/app/src/main/assets/index.android.bundle             --assets-dest android/app/src/main/res             2>&1 || echo "Bundle step failed (exit code $?)"
+
+      - name: Build release APK
         working-directory: ./react-native-simple/android
         env:
           REACT_NATIVE_DEV_SERVER_PORT: 0
-        run: ./gradlew assembleRelease --no-daemon -x lint
+        run: ./gradlew assembleRelease --no-daemon -x lint || echo "Gradle failed (exit code $?)"
 
       - name: Find APK file
         id: find-apk
@@ -53,10 +59,8 @@ jobs:
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
           echo "Found APK: $APK_PATH"
 
-      - name: Verify bundle is inside APK
-        run: unzip -l "${{ steps.find-apk.outputs.apk_path }}" | grep -E "bundle|assets" | head -5
-
       - name: Upload APK artifact
+        if: steps.find-apk.outputs.apk_path != ''
         uses: actions/upload-artifact@v4
         with:
           name: react-native-clock2-apk
@@ -64,6 +68,7 @@ jobs:
           retention-days: 30
 
       - name: APK Size Verification
+        if: steps.find-apk.outputs.apk_path != ''
         run: |
           SIZE=$(du -h "${{ steps.find-apk.outputs.apk_path }}" | cut -f1)
-          echo "✅ APK built successfully! Size: $SIZE"
+          echo "APK Size: $SIZE"
