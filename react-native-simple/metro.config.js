@@ -1,5 +1,9 @@
 const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
 
-const config = {};
+const config = {
+  transformer: {
+    hermesParser: true,
+  },
+};
 
 module.exports = mergeConfig(getDefaultConfig(__dirname), config);
