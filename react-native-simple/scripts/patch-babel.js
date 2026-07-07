@@ -35,11 +35,20 @@ if (fs.existsSync(file)) {
   let content = fs.readFileSync(file, 'utf8');
   let patched = false;
 
-  // Patch generateUidIdentifier
-  const old1 = 'this.declarations[name] = this.scope.generateUidIdentifier(name);';
-  const new1 = 'const _s=this.scope||{}; const _g=_s.generateUidIdentifier||((n)=>({type:"Identifier",name:n})); this.declarations[name] = _g(name);';
-  if (content.includes(old1)) {
-    content = content.replace(old1, new1);
+  // Fix corrupted patch first (from previous broken patch)
+  const corrupted = 'const uid = const _s=this.scope||{}; const _g=_s.generateUidIdentifier||((n)=>({type:"Identifier",name:n})); this.declarations[name] = _g(name);';
+  if (content.includes(corrupted)) {
+    content = content.replace(corrupted,
+      'const _s=this.scope||{}; const _g=_s.generateUidIdentifier?.bind(_s)||((n)=>({type:"Identifier",name:n})); const uid = _g(name); this.declarations[name] = uid;');
+    patched = true;
+    console.log('✅ Fixed corrupted @babel/core patch');
+  }
+
+  // Patch generateUidIdentifier - full statement
+  const oldGen = 'const uid = this.scope.generateUidIdentifier(name);';
+  const newGen = 'const _s=this.scope||{}; const _g=_s.generateUidIdentifier?.bind(_s)||((n)=>({type:"Identifier",name:n})); const uid = _g(name);';
+  if (content.includes(oldGen) && !content.includes(newGen)) {
+    content = content.replace(oldGen, newGen);
     patched = true;
   }
 
@@ -62,14 +71,15 @@ if (fs.existsSync(file)) {
   }
 
   // Patch unshiftContainer
-  const old2 = `this.path.unshiftContainer("body", nodes);
+  if (content.includes('this.path.unshiftContainer("body", nodes);')) {
+    content = content.replace(
+      `this.path.unshiftContainer("body", nodes);
     this.path.get("body").forEach(path => {
       if (nodes.indexOf(path.node) === -1) return;
       if (path.isVariableDeclaration()) this.scope.registerDeclaration(path);
-    });`;
-  const new2 = `if (this.path) { this.path.unshiftContainer("body", nodes); this.path.get("body").forEach(path => { if (nodes.indexOf(path.node) === -1) return; if (this.scope && path.isVariableDeclaration()) this.scope.registerDeclaration(path); }); }`;
-  if (content.includes(old2)) {
-    content = content.replace(old2, new2);
+    });`,
+      `if (this.path) { this.path.unshiftContainer("body", nodes); this.path.get("body").forEach(path => { if (nodes.indexOf(path.node) === -1) return; if (this.scope && path.isVariableDeclaration()) this.scope.registerDeclaration(path); }); }`
+    );
     patched = true;
   }
 
@@ -97,8 +107,6 @@ if (patchFile(icsFile, icsOld, icsNew)) {
 const scopeFile = 'node_modules/@babel/traverse/lib/scope/index.js';
 if (fs.existsSync(scopeFile)) {
   let content = fs.readFileSync(scopeFile, 'utf8');
-  // The call at line 985: this.path.hub.addHelper(helperName) - already handled by Hub patch
-  // Check if addHelper call might need path.hub protection
   const oldScope = 'return callExpression(this.path.hub.addHelper(helperName), args);';
   const newScope = 'return callExpression(this.path&&this.path.hub&&this.path.hub.addHelper?this.path.hub.addHelper(helperName):{type:"Identifier",name:helperName}, args);';
   if (content.includes(oldScope)) {
