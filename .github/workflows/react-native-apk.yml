@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: react-native-simple/package-lock.json
+          cache-dependency-path: react-native-simple/package.json
 
       - name: Setup Java 17
         uses: actions/setup-java@v3
