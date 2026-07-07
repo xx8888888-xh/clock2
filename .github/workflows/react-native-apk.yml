@@ -41,7 +41,7 @@ jobs:
         working-directory: ./react-native-simple
         run: node scripts/patch-babel.js
 
-      - name: Create JS bundle
+      - name: Create JS bundle for release
         working-directory: ./react-native-simple
         env:
           CI: true
@@ -58,81 +58,73 @@ jobs:
             --assets-dest android/app/src/main/res \
             2>&1
           echo "Bundle exit: $?"
-          ls -la android/app/src/main/assets/
-          if [ ! -f android/app/src/main/assets/index.android.bundle ]; then
-            echo "ERROR: Bundle creation failed"
-            exit 1
+          if [ -f android/app/src/main/assets/index.android.bundle ]; then
+            echo "Bundle created: $(du -h android/app/src/main/assets/index.android.bundle | cut -f1)"
           fi
 
-      - name: Create JS bundle explicitly for release
-        working-directory: ./react-native-simple
-        env:
-          CI: true
-          REACT_NATIVE_DEV_SERVER_PORT: 0
-        run: |
-          echo "=== CREATING JS BUNDLE FOR RELEASE ==="
-          npx react-native bundle \
-            --platform android \
-            --dev false \
-            --entry-file index.js \
-            --bundle-output android/app/src/main/assets/index.android.bundle \
-            --assets-dest android/app/src/main/res \
-            --minify false \
-            2>&1
-          ls -la android/app/src/main/assets/
-
-      - name: Check RN build config
-        working-directory: ./react-native-simple
-        run: |
-          echo "=== RN CONFIG ==="
-          cat android/app/build.gradle | grep -A5 "react {"
-          cat android/gradle.properties | grep -E "hermes|newArch"
-          echo "=== BUNDLE EXISTS? ==="
-          ls -la android/app/src/main/assets/index.android.bundle
-
-      - name: Build release APK (force tasks)
+      - name: Build release APK and capture exact path
         working-directory: ./react-native-simple/android
+        id: gradle-build
         env:
           REACT_NATIVE_DEV_SERVER_PORT: 0
         run: |
-          echo "=== CLEANING ==="
-          ./gradlew clean --no-daemon 2>&1 | tail -5
-          echo "=== FORCING BUNDLE AND APK ==="
-          ./gradlew app:createBundleDebugJsAndAssets app:createBundleReleaseJsAndAssets app:assembleRelease \
-            --rerun-tasks --no-daemon -x lint --console=plain 2>&1 | tee /tmp/gradle.log
+          echo "=== BUILD APK ==="
+          # First check what variants/tasks exist
+          ./gradlew tasks --all --no-daemon 2>&1 | grep -i "assembleRelease\|createBundle" | head -20
+          echo "=== RUNNING BUILD ==="
+          ./gradlew app:assembleRelease --rerun-tasks --no-daemon -x lint --console=plain 2>&1 | tee /tmp/gradle.log
           GRADLE_EXIT=$?
           echo "=== GRADLE EXIT: $GRADLE_EXIT ==="
-          echo "=== APK LOCATIONS ==="
-          ls -laR app/build/outputs/apk/release/ 2>/dev/null | head -30
-          find . -path "*/outputs/apk/*" -name "*.apk" 2>/dev/null
-          echo "=== ALL APK ==="
+          # Extract APK path from Gradle output
+          APK_IN_LOG=$(grep -oP 'file://\K[^ ]+\.apk' /tmp/gradle.log 2>/dev/null | head -1)
+          if [ -z "$APK_IN_LOG" ]; then
+            APK_IN_LOG=$(grep -oP '/[^\s]+\.apk' /tmp/gradle.log 2>/dev/null | head -1)
+          fi
+          echo "APK from log: $APK_IN_LOG"
+          # List all outputs
+          echo "=== OUTPUTS DIR ==="
+          ls -laR app/build/outputs/ 2>/dev/null | head -60
+          echo "=== APK FILES ==="
           find . -name "*.apk" -type f 2>/dev/null
-          echo "=== LAST 60 LOG LINES ==="
-          tail -60 /tmp/gradle.log
+          echo "=== GRADLE LOG END ==="
+          tail -80 /tmp/gradle.log
           if [ $GRADLE_EXIT -ne 0 ]; then
-            echo "BUILD FAILED with exit $GRADLE_EXIT"
+            echo "BUILD FAILED"
             exit 1
           fi
 
-      - name: Find APK file
+      - name: Find APK
         id: find-apk
         run: |
           echo "=== FIND APK ==="
-          APK=$(find . -path "*/outputs/apk/release/*.apk" -type f 2>/dev/null | head -1)
-          if [ -z "$APK" ]; then
-            APK=$(find . -name "*.apk" -type f 2>/dev/null | head -1)
-          fi
-          echo "APK_PATH=$APK"
+          # The APK must be somewhere in app/build/outputs/apk/release/
+          # But also check the Gradle log for the exact path
+          APK=""
+          for path in \
+            "react-native-simple/android/app/build/outputs/apk/release" \
+            "react-native-simple/android/app/build/outputs/apk" \
+            "react-native-simple/android/app/build/outputs" \
+            "."; do
+            if [ -d "$path" ]; then
+              echo "Searching: $path"
+              APK=$(find "$path" -name "*.apk" -type f 2>/dev/null | head -1)
+              if [ -n "$APK" ]; then
+                break
+              fi
+            fi
+          done
+          echo "Found APK: $APK"
           echo "apk_path=$APK" >> $GITHUB_OUTPUT
           if [ -z "$APK" ] || [ ! -f "$APK" ]; then
-            echo "ERROR: No APK found!"
-            find . -type f -name "*.apk" 2>/dev/null
-            ls -laR app/build/outputs/ 2>/dev/null | head -50
+            echo "ERROR: APK not found!"
+            echo "Full search:"
+            find react-native-simple -type f -name "*.apk" 2>/dev/null
+            echo "Build outputs:"
+            ls -laR react-native-simple/android/app/build/outputs/ 2>/dev/null | head -50
             exit 1
           fi
-          echo "APK: $APK ($(du -h $APK | cut -f1))"
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: react-native-clock2-apk-${{ github.run_number }}
