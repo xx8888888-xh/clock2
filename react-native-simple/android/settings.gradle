@@ -7,17 +7,6 @@ pluginManagement {
     includeBuild("../node_modules/@react-native/gradle-plugin")
 }
 
-dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
-    repositories {
-        google()
-        mavenCentral()
-        maven {
-            url "$rootDir/../node_modules/react-native/android"
-        }
-    }
-}
-
 rootProject.name = 'Clock2ReactNative'
 include ':app'
 includeBuild('../node_modules/@react-native/gradle-plugin')
