@@ -29,7 +29,7 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Delete stale package-lock.json (force fresh resolution with overrides)
+      - name: Delete stale package-lock.json
         working-directory: ./react-native-simple
         run: rm -f package-lock.json
 
@@ -37,45 +37,51 @@ jobs:
         working-directory: ./react-native-simple
         run: npm install
 
-      - name: Build release APK (Gradle bundles JS automatically)
+      - name: Build release APK
         working-directory: ./react-native-simple/android
         env:
           REACT_NATIVE_DEV_SERVER_PORT: 0
         run: |
-          ./gradlew assembleRelease --no-daemon -x lint --stacktrace 2>&1 | tee /tmp/gradle-output.log
-          echo "--- GRADLE EXIT CODE: $? ---"
-          tail -30 /tmp/gradle-output.log
+          echo "=== BUILDING APK ==="
+          set -x
+          ./gradlew assembleRelease --no-daemon -x lint --info 2>&1 | tee /tmp/gradle.log
+          GRADLE_EXIT=$?
+          echo "=== GRADLE EXIT CODE: $GRADLE_EXIT ==="
+          echo "=== LAST 50 LINES OF GRADLE LOG ==="
+          tail -50 /tmp/gradle.log
+          if [ $GRADLE_EXIT -ne 0 ]; then
+            echo "GRADLE FAILED with exit code $GRADLE_EXIT"
+            exit 1
+          fi
+          echo "=== SEARCHING FOR APK FILES ==="
+          find . -name "*.apk" -type f 2>/dev/null | while read f; do echo "APK: $f ($(du -h $f | cut -f1))"; done
+          echo "=== APK SEARCH COMPLETE ==="
 
       - name: Find APK file
         id: find-apk
         run: |
-          echo "=== Searching for APK files ==="
-          find react-native-simple/android -name "*.apk" -type f 2>/dev/null || true
-          echo "=== Search complete ==="
-          APK_PATH=$(find react-native-simple/android -name "*.apk" -path "*/release/*" -type f 2>/dev/null | head -1)
-          if [ -z "$APK_PATH" ]; then
-            APK_PATH=$(find react-native-simple/android -name "*.apk" -type f 2>/dev/null | head -1)
-          fi
+          echo "=== Find APK ==="
+          find react-native-simple/android -name "*.apk" -type f 2>/dev/null
+          APK_PATH=$(find react-native-simple/android -name "*.apk" -type f 2>/dev/null | head -1)
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
-          echo "Found APK: $APK_PATH"
-          if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
-            echo "APK size: $(du -h "$APK_PATH" | cut -f1)"
+          echo "APK_PATH=$APK_PATH"
+          if [ -z "$APK_PATH" ]; then
+            echo "ERROR: No APK found!"
+            exit 1
           fi
+          echo "Found: $APK_PATH ($(du -h $APK_PATH | cut -f1))"
 
       - name: Verify bundle is inside APK
-        if: steps.find-apk.outputs.apk_path != ''
         run: unzip -l "${{ steps.find-apk.outputs.apk_path }}" | grep -E "bundle|assets" | head -10
 
       - name: Upload APK artifact
-        if: steps.find-apk.outputs.apk_path != ''
         uses: actions/upload-artifact@v4
         with:
-          name: react-native-clock2-apk
+          name: react-native-clock2-apk-${{ github.run_number }}
           path: ${{ steps.find-apk.outputs.apk_path }}
           retention-days: 30
 
       - name: APK Size Verification
-        if: steps.find-apk.outputs.apk_path != ''
         run: |
           SIZE=$(du -h "${{ steps.find-apk.outputs.apk_path }}" | cut -f1)
           echo "✅ APK built successfully! Size: $SIZE"
