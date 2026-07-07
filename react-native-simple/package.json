@@ -5,7 +5,7 @@
   "scripts": {
     "start": "react-native start",
     "android": "react-native run-android",
-    "bundle:android": "react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res",
+    "bundle:android": "npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res",
     "build:debug": "cd android && ./gradlew assembleDebug"
   },
   "dependencies": {
@@ -14,9 +14,10 @@
     "@react-native/metro-config": "0.73.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0",
-    "@babel/preset-env": "^7.20.0",
-    "@babel/runtime": "^7.20.0",
+    "@babel/core": "^7.23.0",
+    "@babel/preset-env": "^7.23.0",
+    "@babel/runtime": "^7.23.0",
+    "@babel/helpers": "^7.23.0",
     "metro-react-native-babel-preset": "0.76.7"
   }
 }
