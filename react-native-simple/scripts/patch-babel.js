@@ -1,150 +1,88 @@
 const fs = require('fs');
 const path = require('path');
 
+/**
+ * Clean, safe Babel patches for RN 0.73 / Babel 7.23.x
+ * Only patches if the exact pattern is found (no blind replaces).
+ */
+
 function patchFile(filePath, oldContent, newContent) {
-  if (fs.existsSync(filePath)) {
-    let content = fs.readFileSync(filePath, 'utf8');
-    if (content.includes(oldContent)) {
-      content = content.replace(oldContent, newContent);
-      fs.writeFileSync(filePath, content);
-      return true;
-    }
-  }
-  return false;
+  if (!fs.existsSync(filePath)) return false;
+  let content = fs.readFileSync(filePath, 'utf8');
+  if (!content.includes(oldContent)) return false;
+  content = content.replace(oldContent, newContent);
+  fs.writeFileSync(filePath, content);
+  return true;
 }
 
 console.log('🔧 Applying Babel patches...\n');
 
-// Patch 1: @babel/traverse Hub.addHelper() - multi-line format
+// Patch 1: @babel/traverse Hub.addHelper() - prevent throw in RN context
 const hubFile = 'node_modules/@babel/traverse/lib/hub.js';
-const hubOld = `addHelper() {
-    throw new Error("Helpers are not supported by the default hub.");
-  }`;
-const hubNew = `addHelper(name) {
-    return { type: "Identifier", name: name };
-  }`;
-if (patchFile(hubFile, hubOld, hubNew)) {
-  console.log('✅ Patched @babel/traverse Hub.addHelper()');
-} else {
-  console.log('⚠️  @babel/traverse Hub.addHelper() - not patched (already patched or not found)');
-}
+const patched1 = patchFile(hubFile,
+  `addHelper() {
+    throw new Error("Helpers are not supported by the default hub.");`,
+  `addHelper(name) {
+    return { type: "Identifier", name };`
+);
+console.log(patched1 ? '✅ Patched @babel/traverse Hub.addHelper()' 
+  : '⚠️  @babel/traverse Hub.addHelper() - already patched or not found');
 
-// Patch 2: @babel/core File._addHelper() - handle null scope
+// Patch 2: @babel/core - File._addHelper() null scope protection
 const file = 'node_modules/@babel/core/lib/transformation/file/file.js';
 if (fs.existsSync(file)) {
   let content = fs.readFileSync(file, 'utf8');
-  let patched = false;
+  let dirty = false;
 
-  // Fix corrupted patch first (from previous broken patch)
-  const corrupted = 'const uid = const _s=this.scope||{}; const _g=_s.generateUidIdentifier||((n)=>({type:"Identifier",name:n})); this.declarations[name] = _g(name);';
-  if (content.includes(corrupted)) {
-    content = content.replace(corrupted,
-      'const _s=this.scope||{}; const _g=_s.generateUidIdentifier?.bind(_s)||((n)=>({type:"Identifier",name:n})); const uid = _g(name); this.declarations[name] = uid;');
-    patched = true;
-    console.log('✅ Fixed corrupted @babel/core patch');
+  // Guard generateUidIdentifier
+  const genPattern = 'const uid = this.scope.generateUidIdentifier(name);';
+  const genReplacement = 'const _s = this.scope; const _g = _s ? _s.generateUidIdentifier.bind(_s) : (n => ({ type: "Identifier", name: n })); const uid = _g(name);';
+  if (content.includes(genPattern)) {
+    content = content.replace(genPattern, genReplacement);
+    dirty = true;
   }
 
-  // Patch generateUidIdentifier - full statement
-  const oldGen = 'const uid = this.scope.generateUidIdentifier(name);';
-  const newGen = 'const _s=this.scope||{}; const _g=_s.generateUidIdentifier?.bind(_s)||((n)=>({type:"Identifier",name:n})); const uid = _g(name);';
-  if (content.includes(oldGen) && !content.includes(newGen)) {
-    content = content.replace(oldGen, newGen);
-    patched = true;
-  }
-
-  // Patch getAllBindings
+  // Guard getAllBindings
   if (content.includes('Object.keys(this.scope.getAllBindings())')) {
     content = content.replace(
       'Object.keys(this.scope.getAllBindings())',
-      '(this.scope?Object.keys(this.scope.getAllBindings()):[])'
+      '(this.scope ? Object.keys(this.scope.getAllBindings()) : [])'
     );
-    patched = true;
+    dirty = true;
   }
 
-  // Patch hasBinding
-  if (content.includes('if (this.path.scope.hasBinding(name, true))')) {
+  // Guard hasBinding
+  if (content.includes('this.path.scope.hasBinding(name, true)')) {
     content = content.replace(
-      'if (this.path.scope.hasBinding(name, true))',
-      'if (this.path&&this.path.scope&&this.path.scope.hasBinding(name, true))'
+      'this.path.scope.hasBinding(name, true)',
+      '(this.path && this.path.scope ? this.path.scope.hasBinding(name, true) : false)'
     );
-    patched = true;
+    dirty = true;
   }
 
-  // Patch unshiftContainer
-  if (content.includes('this.path.unshiftContainer("body", nodes);')) {
-    content = content.replace(
-      `this.path.unshiftContainer("body", nodes);
-    this.path.get("body").forEach(path => {
-      if (nodes.indexOf(path.node) === -1) return;
-      if (path.isVariableDeclaration()) this.scope.registerDeclaration(path);
-    });`,
-      `if (this.path) { this.path.unshiftContainer("body", nodes); this.path.get("body").forEach(path => { if (nodes.indexOf(path.node) === -1) return; if (this.scope && path.isVariableDeclaration()) this.scope.registerDeclaration(path); }); }`
-    );
-    patched = true;
-  }
-
-  if (patched) {
+  if (dirty) {
     fs.writeFileSync(file, content);
-    console.log('✅ Patched @babel/core File._addHelper()');
+    console.log('✅ Patched @babel/core file.js');
   } else {
-    console.log('⚠️  @babel/core - not patched (already patched or not found)');
+    console.log('ℹ️  @babel/core file.js - no patches needed');
   }
 } else {
-  console.log('⚠️  @babel/core file not found');
+  console.log('ℹ️  @babel/core file.js - not found (may be ESM, skipping)');
 }
 
-// Patch 3: @babel/plugin-transform-classes inline-callSuper-helpers.js
-const icsFile = 'node_modules/@babel/plugin-transform-classes/lib/inline-callSuper-helpers.js';
-if (fs.existsSync(icsFile)) {
-  let content = fs.readFileSync(icsFile, 'utf8');
-  let patched = false;
-
-  // Patch generateUidIdentifier call
-  const oldIcs1 = 'const id = file.scope.generateUidIdentifier("callSuper");';
-  const newIcs1 = 'const id = (file.scope||(file.path&&file.path.scope)||{}).generateUidIdentifier?.("callSuper")||{type:"Identifier",name:"callSuper"};';
-  if (content.includes(oldIcs1)) {
-    content = content.replace(oldIcs1, newIcs1);
-    patched = true;
-  }
-
-  // Fix unshiftContainer - handle null file.path
-  const oldIcs2 = 'const [fnPath] = file.path.unshiftContainer("body", [fn]);';
-  const newIcs2 = 'const [fnPath] = file.path ? file.path.unshiftContainer("body", [fn]) : null;';
-  if (content.includes(oldIcs2)) {
-    content = content.replace(oldIcs2, newIcs2);
-    patched = true;
-  }
-
-  // Fix registerDeclaration - handle null file.scope
-  const oldIcs3 = 'file.scope.registerDeclaration(fnPath);';
-  const newIcs3 = 'if (file.scope) file.scope.registerDeclaration(fnPath);';
-  if (content.includes(oldIcs3)) {
-    content = content.replace(oldIcs3, newIcs3);
-    patched = true;
-  }
-
-  if (patched) {
-    fs.writeFileSync(icsFile, content);
-    console.log('✅ Patched @babel/plugin-transform-classes inline-callSuper-helpers');
+// Patch 3: metro-react-native-babel-transformer - guard generateUidIdentifier
+const mbrnFile = 'node_modules/metro-react-native-babel-transformer/src/index.js';
+if (fs.existsSync(mbrnFile)) {
+  let content = fs.readFileSync(mbrnFile, 'utf8');
+  if (content.includes('scope.generateUidIdentifier')) {
+    content = content.replace(
+      'scope.generateUidIdentifier',
+      '(scope ? scope.generateUidIdentifier.bind(scope) : (n => ({type:"Identifier",name:n})))'
+    );
+    fs.writeFileSync(mbrnFile, content);
+    console.log('✅ Patched metro-react-native-babel-transformer');
   } else {
-    console.log('⚠️  inline-callSuper-helpers - not patched (already patched or not found)');
-  }
-} else {
-  console.log('⚠️  inline-callSuper-helpers file not found');
-}
-
-// Patch 4: @babel/traverse scope/index.js - handle null path
-const scopeFile = 'node_modules/@babel/traverse/lib/scope/index.js';
-if (fs.existsSync(scopeFile)) {
-  let content = fs.readFileSync(scopeFile, 'utf8');
-  const oldScope = 'return callExpression(this.path.hub.addHelper(helperName), args);';
-  const newScope = 'return callExpression(this.path&&this.path.hub&&this.path.hub.addHelper?this.path.hub.addHelper(helperName):{type:"Identifier",name:helperName}, args);';
-  if (content.includes(oldScope)) {
-    content = content.replace(oldScope, newScope);
-    fs.writeFileSync(scopeFile, content);
-    console.log('✅ Patched @babel/traverse scope/index.js');
-  } else {
-    console.log('ℹ️  @babel/traverse scope/index.js - no change needed');
+    console.log('ℹ️  metro-react-native-babel-transformer - already patched or no change needed');
   }
 }
 
