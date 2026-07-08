@@ -29,6 +29,11 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Generate debug keystore
+        run: |
+          keytool -genkeypair -v -keystore react-native-simple/android/app/debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US" 2>&1
+          echo "Keystore generated: $(ls -la react-native-simple/android/app/debug.keystore)"
+
       - name: Delete stale package-lock.json
         working-directory: ./react-native-simple
         run: rm -f package-lock.json
@@ -86,6 +91,7 @@ jobs:
 
       - name: Find APK
         id: find-apk
+        working-directory: ./react-native-simple/android
         run: |
           echo "=== FINDING APK ==="
           echo "PWD: $(pwd)"
@@ -97,6 +103,7 @@ jobs:
             ls -laR app/build/outputs/ 2>/dev/null | head -30
             exit 1
           fi
+          echo "APK size: $(du -h "$APK" | cut -f1)"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
