@@ -3,8 +3,6 @@ apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
 react {
-    // Bundle JS into debug APK so it works without Metro
-    bundleInDebug = true
 }
 
 android {
