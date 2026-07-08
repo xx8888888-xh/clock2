@@ -36,7 +36,7 @@ jobs:
         run: npm install --prefix react-native-simple
 
       - name: Run postinstall patch script
-        run: node --prefix react-native-simple scripts/patch-babel.js
+        run: node react-native-simple/scripts/patch-babel.js
 
       - name: Create JS bundle
         run: |
@@ -59,8 +59,7 @@ jobs:
       - name: Build debug APK from repo root
         run: |
           echo "=== BUILDING APK FROM REPO ROOT ==="
-          pwd
-          ls -la react-native-simple/android/
+          pwd && ls -la react-native-simple/android/
           echo "=== CLEAN GRADLE BUILD ==="
           ./gradlew --project-dir react-native-simple/android clean --no-daemon 2>&1 | tail -5
           echo "=== BUILDING APK ==="
@@ -68,8 +67,6 @@ jobs:
             --rerun-tasks --no-daemon -x lint --console=plain 2>&1 | tee /tmp/gradle.log
           GRADLE_EXIT=$?
           echo "=== GRADLE EXIT: $GRADLE_EXIT ==="
-          echo "=== WORKING DIR CONTENTS ==="
-          ls -la
           echo "=== APK OUTPUTS ==="
           ls -laR react-native-simple/android/app/build/outputs/ 2>/dev/null | head -60
           echo "=== APK FILES ==="
@@ -90,6 +87,7 @@ jobs:
           echo "apk_path=$APK" >> $GITHUB_OUTPUT
           if [ -z "$APK" ] || [ ! -f "$APK" ]; then
             echo "ERROR: No APK found!"
+            ls -laR react-native-simple/android/app/build/outputs/ 2>/dev/null | head -50
             exit 1
           fi
 
