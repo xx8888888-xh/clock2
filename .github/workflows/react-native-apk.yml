@@ -61,20 +61,17 @@ jobs:
             echo "Bundle: $(du -h android/app/src/main/assets/index.android.bundle | cut -f1)"
           fi
 
-      - name: Build debug APK with forced clean
+      - name: Build debug APK
         working-directory: ./react-native-simple/android
         env:
           REACT_NATIVE_DEV_SERVER_PORT: 0
         run: |
-          echo "=== CLEANING BUILD DIR ==="
-          rm -rf app/build
-          rm -rf app/.cxx
           echo "=== BUILDING APK ==="
-          ./gradlew assembleDebug --no-daemon -x lint 2>&1 | tee /tmp/gradle.log
+          ./gradlew :app:assembleDebug --rerun-tasks --no-daemon -x lint 2>&1 | tee /tmp/gradle.log
           GRADLE_EXIT=$?
           echo "=== GRADLE EXIT: $GRADLE_EXIT ==="
-          echo "=== APP/BUILD AFTER BUILD ==="
-          ls -laR app/build/ 2>/dev/null | head -40 || echo "No app/build dir"
+          echo "=== APK OUTPUT DIR ==="
+          ls -laR app/build/outputs/ 2>/dev/null | head -40
           echo "=== APK FILES ==="
           find . -name "*.apk" -type f 2>/dev/null
           echo "=== LAST 30 GRADLE LOG ==="
@@ -88,12 +85,7 @@ jobs:
         id: find-apk
         run: |
           echo "=== FIND APK ==="
-          # Find APK from android/ subdirectory
           APK=$(find . -name "*.apk" -type f 2>/dev/null | head -1)
-          # If not found, try broader
-          if [ -z "$APK" ]; then
-            APK=$(find /home/runner/work/clock2/clock2 -name "*.apk" -type f 2>/dev/null | head -1)
-          fi
           echo "APK_PATH=$APK"
           echo "apk_path=$APK" >> $GITHUB_OUTPUT
           if [ -z "$APK" ] || [ ! -f "$APK" ]; then
