@@ -30,57 +30,46 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Delete stale package-lock.json
-        working-directory: ./react-native-simple
-        run: rm -f package-lock.json
+        run: rm -f react-native-simple/package-lock.json
 
       - name: Install npm dependencies
-        working-directory: ./react-native-simple
-        run: npm install
+        run: npm install --prefix react-native-simple
 
       - name: Run postinstall patch script
-        working-directory: ./react-native-simple
-        run: node scripts/patch-babel.js
+        run: node react-native-simple/scripts/patch-babel.js
 
       - name: Create JS bundle
-        working-directory: ./react-native-simple
-        env:
-          CI: true
-          REACT_NATIVE_DEV_SERVER_PORT: 0
         run: |
           echo "=== CREATING JS BUNDLE ==="
-          mkdir -p android/app/src/main/assets
-          npx react-native bundle \
+          mkdir -p react-native-simple/android/app/src/main/assets
+          npx --prefix react-native-simple react-native bundle \
             --platform android \
             --dev false \
             --entry-file index.js \
-            --bundle-output android/app/src/main/assets/index.android.bundle \
-            --assets-dest android/app/src/main/res \
+            --bundle-output react-native-simple/android/app/src/main/assets/index.android.bundle \
+            --assets-dest react-native-simple/android/app/src/main/res \
             2>&1
           echo "Bundle exit: $?"
-          ls -la android/app/src/main/assets/
-          if [ -f android/app/src/main/assets/index.android.bundle ]; then
-            echo "Bundle size: $(wc -c < android/app/src/main/assets/index.android.bundle) bytes"
+          ls -la react-native-simple/android/app/src/main/assets/
+          if [ -f react-native-simple/android/app/src/main/assets/index.android.bundle ]; then
+            echo "Bundle OK: $(wc -c < react-native-simple/android/app/src/main/assets/index.android.bundle) bytes"
           fi
 
       - name: Build debug APK
-        working-directory: ./react-native-simple/android
-        env:
-          REACT_NATIVE_DEV_SERVER_PORT: 0
         run: |
-          echo "=== WORKING DIR ==="
-          pwd
-          echo "=== GRADLE VERSION ==="
-          ./gradlew --version
           echo "=== BUILDING APK ==="
-          ./gradlew :app:assembleDebug --rerun-tasks --no-daemon -x lint 2>&1 | tee /tmp/gradle.log
+          echo "PWD: $(pwd)"
+          echo "Files:"
+          ls -la react-native-simple/android/
+          echo "=== GRADLE BUILD FROM REPO ROOT ==="
+          ./gradlew --project-dir react-native-simple/android :app:assembleDebug \
+            --rerun-tasks --no-daemon -x lint 2>&1 | tee /tmp/gradle.log
           GRADLE_EXIT=$?
           echo "=== GRADLE EXIT: $GRADLE_EXIT ==="
-          echo "=== APP/BUILD DIR ==="
-          ls -la app/build/ 2>/dev/null | head -20 || echo "No app/build dir"
-          echo "=== APK FILES ==="
-          find . -name "*.apk" -type f 2>/dev/null
-          echo "=== LAST 50 LOG ==="
-          tail -50 /tmp/gradle.log
+          echo "=== APK SEARCH ==="
+          find react-native-simple -name "*.apk" -type f 2>/dev/null
+          echo "=== GRADLE LOG LAST 30 ==="
+          tail -30 /tmp/gradle.log
           if [ $GRADLE_EXIT -ne 0 ]; then
             echo "BUILD FAILED"
             exit 1
@@ -90,22 +79,26 @@ jobs:
         id: find-apk
         run: |
           echo "=== FIND APK ==="
-          # APK should be at react-native-simple/android/app/build/outputs/apk/debug/
-          APK="react-native-simple/android/app/build/outputs/apk/debug/app-debug.apk"
-          if [ -f "$APK" ]; then
-            echo "Found: $APK ($(du -h $APK | cut -f1))"
-          else
-            echo "Trying search..."
-            APK=$(find react-native-simple -name "*.apk" -type f 2>/dev/null | head -1)
-            if [ -n "$APK" ] && [ -f "$APK" ]; then
-              echo "Found via search: $APK"
-            else
-              echo "ERROR: No APK found!"
-              ls -laR react-native-simple/android/app/build/outputs/ 2>/dev/null | head -40
-              exit 1
+          echo "Current dir: $(pwd)"
+          # The build ran from repo root, APK should be at:
+          # react-native-simple/android/app/build/outputs/apk/debug/app-debug.apk
+          # But use find to be safe
+          APK=$(find . -name "*.apk" -type f 2>/dev/null | head -1)
+          echo "Found APK: $APK"
+          # If not found, try specific path
+          if [ -z "$APK" ]; then
+            candidate="react-native-simple/android/app/build/outputs/apk/debug/app-debug.apk"
+            if [ -f "$candidate" ]; then
+              APK="$candidate"
+              echo "Found via explicit path: $APK"
             fi
           fi
           echo "apk_path=$APK" >> $GITHUB_OUTPUT
+          if [ -z "$APK" ] || [ ! -f "$APK" ]; then
+            echo "ERROR: No APK found!"
+            ls -la react-native-simple/android/app/build/outputs/ 2>/dev/null || echo "No outputs dir"
+            exit 1
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
