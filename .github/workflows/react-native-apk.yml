@@ -97,7 +97,10 @@ jobs:
           echo "PWD: $(pwd)"
           APK=$(find . -name "*.apk" -type f 2>/dev/null | head -1)
           echo "Found: $APK"
-          echo "apk_path=$APK" >> $GITHUB_OUTPUT
+          # Convert to absolute path so artifact upload works from repo root
+          ABS_APK=$(realpath "$APK")
+          echo "Absolute: $ABS_APK"
+          echo "apk_path=$ABS_APK" >> $GITHUB_OUTPUT
           if [ -z "$APK" ] || [ ! -f "$APK" ]; then
             echo "ERROR: No APK found!"
             ls -laR app/build/outputs/ 2>/dev/null | head -30
