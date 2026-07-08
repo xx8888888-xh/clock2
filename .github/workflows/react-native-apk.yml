@@ -30,47 +30,57 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Delete stale package-lock.json
-        run: rm -f react-native-simple/package-lock.json
+        working-directory: ./react-native-simple
+        run: rm -f package-lock.json
 
       - name: Install npm dependencies
-        run: npm install --prefix react-native-simple
+        working-directory: ./react-native-simple
+        run: npm install
 
       - name: Run postinstall patch script
-        run: node react-native-simple/scripts/patch-babel.js
+        working-directory: ./react-native-simple
+        run: node scripts/patch-babel.js
 
       - name: Create JS bundle
+        working-directory: ./react-native-simple
+        env:
+          CI: true
+          REACT_NATIVE_DEV_SERVER_PORT: 0
         run: |
           echo "=== CREATING JS BUNDLE ==="
-          mkdir -p react-native-simple/android/app/src/main/assets
-          npx --prefix react-native-simple react-native bundle \
+          mkdir -p android/app/src/main/assets
+          npx react-native bundle \
             --platform android \
             --dev false \
             --entry-file index.js \
-            --bundle-output react-native-simple/android/app/src/main/assets/index.android.bundle \
-            --assets-dest react-native-simple/android/app/src/main/res \
+            --bundle-output android/app/src/main/assets/index.android.bundle \
+            --assets-dest android/app/src/main/res \
             2>&1
           echo "Bundle exit: $?"
-          ls -la react-native-simple/android/app/src/main/assets/
-          if [ ! -f react-native-simple/android/app/src/main/assets/index.android.bundle ]; then
+          ls -la android/app/src/main/assets/
+          if [ ! -f android/app/src/main/assets/index.android.bundle ]; then
             echo "ERROR: Bundle not created!"
             exit 1
           fi
 
-      - name: Build debug APK from repo root
+      - name: Build debug APK
+        working-directory: ./react-native-simple/android
+        env:
+          REACT_NATIVE_DEV_SERVER_PORT: 0
         run: |
-          echo "=== BUILDING APK FROM REPO ROOT ==="
-          pwd && ls -la react-native-simple/android/
-          echo "=== CLEAN GRADLE BUILD ==="
-          ./gradlew --project-dir react-native-simple/android clean --no-daemon 2>&1 | tail -5
           echo "=== BUILDING APK ==="
-          ./gradlew --project-dir react-native-simple/android :app:assembleDebug \
+          pwd && ls -la app/build/outputs/ 2>/dev/null | head -5 || echo "No outputs yet"
+          echo "=== CLEAN ==="
+          ./gradlew clean --no-daemon 2>&1 | tail -3
+          echo "=== BUILDING ==="
+          ./gradlew :app:assembleDebug \
             --rerun-tasks --no-daemon -x lint --console=plain 2>&1 | tee /tmp/gradle.log
           GRADLE_EXIT=$?
           echo "=== GRADLE EXIT: $GRADLE_EXIT ==="
           echo "=== APK OUTPUTS ==="
-          ls -laR react-native-simple/android/app/build/outputs/ 2>/dev/null | head -60
+          ls -laR app/build/outputs/ 2>/dev/null | head -60
           echo "=== APK FILES ==="
-          find react-native-simple -name "*.apk" -type f 2>/dev/null
+          find . -name "*.apk" -type f 2>/dev/null
           echo "=== LAST 50 GRADLE LOG ==="
           tail -50 /tmp/gradle.log
           if [ $GRADLE_EXIT -ne 0 ]; then
@@ -82,12 +92,12 @@ jobs:
         id: find-apk
         run: |
           echo "=== FIND APK ==="
-          APK=$(find react-native-simple -name "*.apk" -type f 2>/dev/null | head -1)
+          APK=$(find . -name "*.apk" -type f 2>/dev/null | head -1)
           echo "APK_PATH=$APK"
           echo "apk_path=$APK" >> $GITHUB_OUTPUT
           if [ -z "$APK" ] || [ ! -f "$APK" ]; then
             echo "ERROR: No APK found!"
-            ls -laR react-native-simple/android/app/build/outputs/ 2>/dev/null | head -50
+            ls -laR app/build/outputs/ 2>/dev/null | head -50
             exit 1
           fi
 
