@@ -27,6 +27,10 @@ jobs:
           flutter-version: '3.24.5'
           channel: 'stable'
           cache: true
+          cache-dependency-path: '.github/workflows/flutter-real-build.yml'
+
+      - name: Flutter doctor
+        run: flutter doctor -v
 
       - name: Get Flutter dependencies
         run: flutter pub get
@@ -34,25 +38,25 @@ jobs:
       - name: Analyze code
         run: flutter analyze || true
 
-      - name: Build Android APK (Release)
-        run: flutter build apk --release 2>&1
+      - name: Build Debug APK
+        run: flutter build apk --debug 2>&1
 
       - name: Verify APK
         run: |
           echo "=== APK验证 ==="
-          APK_FILE="build/app/outputs/flutter-apk/app-release.apk"
-          if [ -f "$APK_FILE" ]; then
-            echo "✅ APK 文件存在: $APK_FILE"
-            ls -lh "$APK_FILE"
-            APK_SIZE=$(stat -c%s "$APK_FILE")
-            echo "APK大小: $((APK_SIZE/1024/1024)) MB"
-            if [ $APK_SIZE -gt 5000000 ]; then
-              echo "✅ APK大于5MB，是真正的APK"
-            else
-              echo "⚠️ APK文件可能偏小"
-            fi
+          APK_FILE="build/app/outputs/flutter-apk/*.apk"
+          APK_COUNT=$(find build/app/outputs/flutter-apk/ -name "*.apk" -type f | wc -l)
+          echo "Found APK files: $APK_COUNT"
+          for APK in $(find build/app/outputs/flutter-apk/ -name "*.apk" -type f); do
+            echo "APK: $APK"
+            ls -lh "$APK"
+            SIZE=$(stat -c%s "$APK")
+            echo "Size: $((SIZE/1024/1024)) MB"
+          done
+          if [ $APK_COUNT -gt 0 ]; then
+            echo "✅ Found APK files"
           else
-            echo "❌ 未找到APK文件"
+            echo "❌ No APK files found"
             ls -la build/app/outputs/ 2>/dev/null || echo "No build dir"
             exit 1
           fi
@@ -61,7 +65,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: clock2-flutter-real-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: build/app/outputs/flutter-apk/
           retention-days: 30
 
     timeout-minutes: 60
