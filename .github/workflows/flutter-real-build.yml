@@ -21,9 +21,6 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -31,23 +28,11 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Verify Android SDK
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          ls -la $ANDROID_HOME/platforms/ 2>/dev/null | head -5 || echo "No platforms dir"
-          ls -la $ANDROID_HOME/build-tools/ 2>/dev/null | head -5 || echo "No build-tools dir"
-
-      - name: Create local.properties
-        run: |
-          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
-          cat android/local.properties
-
       - name: Get Flutter dependencies
         run: flutter pub get
 
       - name: Analyze code
-        run: dart analyze || true
+        run: flutter analyze || true
 
       - name: Build Android APK (Release)
         run: flutter build apk --release 2>&1
@@ -55,19 +40,20 @@ jobs:
       - name: Verify APK
         run: |
           echo "=== APK验证 ==="
-          ls -lh build/app/outputs/flutter-apk/*.apk 2>/dev/null || echo "No APK found in flutter-apk dir"
-          APK=$(find build -name "*.apk" -type f 2>/dev/null | head -1)
-          if [ -n "$APK" ]; then
-            echo "Found APK: $APK"
-            APK_SIZE=$(stat -c%s "$APK")
+          APK_FILE="build/app/outputs/flutter-apk/app-release.apk"
+          if [ -f "$APK_FILE" ]; then
+            echo "✅ APK 文件存在: $APK_FILE"
+            ls -lh "$APK_FILE"
+            APK_SIZE=$(stat -c%s "$APK_FILE")
             echo "APK大小: $((APK_SIZE/1024/1024)) MB"
             if [ $APK_SIZE -gt 5000000 ]; then
               echo "✅ APK大于5MB，是真正的APK"
+            else
+              echo "⚠️ APK文件可能偏小"
             fi
           else
             echo "❌ 未找到APK文件"
-            ls -la build/app/outputs/ 2>/dev/null || echo "No build/app/outputs dir"
-            ls -la build/ 2>/dev/null | head -20
+            ls -la build/app/outputs/ 2>/dev/null || echo "No build dir"
             exit 1
           fi
 
