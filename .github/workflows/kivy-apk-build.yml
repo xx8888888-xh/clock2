@@ -8,7 +8,7 @@ on:
 jobs:
   build-apk:
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     steps:
       - name: Checkout code
@@ -119,18 +119,53 @@ jobs:
           echo "=== Starting APK build at $(date) ==="
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           echo "ANDROID_NDK_ROOT=$ANDROID_NDK_ROOT"
+          echo "NDK contents:"
+          ls $ANDROID_NDK_ROOT/
 
-          # Build
-          timeout 2700 buildozer android debug || BUILD_EXIT=$?
+          # Build with retry logic for transient network errors
+          BUILD_SUCCESS=false
+          for attempt in 1 2 3; do
+            echo "=== Build attempt $attempt of 3 at $(date) ==="
+            
+            # Run buildozer with debug output captured to log
+            timeout 2400 buildozer android debug 2>&1 | tee buildozer.log || {
+              BUILD_EXIT=${PIPESTATUS[0]}
+              echo "Build attempt $attempt exited with code: $BUILD_EXIT"
+            }
 
-          echo "=== Build exit code: $BUILD_EXIT ==="
+            if [ -f "bin/"*.apk 2>/dev/null ]; then
+              echo "=== APK found on attempt $attempt ==="
+              BUILD_SUCCESS=true
+              break
+            fi
+            
+            if [ -f buildozer.log ]; then
+              # Check if failure was transient (502/503/504 network errors)
+              if grep -qi "502\|503\|504\|Bad Gateway\|Service Unavailable\|timeout\|connection" buildozer.log 2>/dev/null; then
+                echo "=== Transient network error detected, retrying in 30 seconds ==="
+                sleep 30
+                # Clean partial build cache before retry
+                rm -rf .buildozer/
+                continue
+              fi
+            fi
+            
+            # Non-retryable failure
+            echo "=== Non-retryable failure on attempt $attempt ==="
+            break
+          done
 
-          if [ -f "bin/"*.apk 2>/dev/null ]; then
-            echo "=== APK found ==="
+          echo "=== Build process complete, success=$BUILD_SUCCESS ==="
+
+          if [ "$BUILD_SUCCESS" = "true" ] && [ -f "bin/"*.apk 2>/dev/null ]; then
+            echo "=== APK built successfully ==="
             ls -lh bin/*.apk
           else
-            echo "=== APK build failed ==="
-            tail -50 buildozer.log
+            echo "=== APK build failed after all attempts ==="
+            if [ -f buildozer.log ]; then
+              echo "=== Last 100 lines of buildozer.log ==="
+              tail -100 buildozer.log
+            fi
             exit 1
           fi
 

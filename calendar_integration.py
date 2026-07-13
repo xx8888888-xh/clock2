@@ -128,7 +128,7 @@ class CalendarIntegration:
             'normal': '📝'
         }
 
-        return emoji_map2.get(event_type, '📝')
+        return emoji_map.get(event_type, '📝')
 
     def check_overdue_events(self):
         """检查过期事件"""
