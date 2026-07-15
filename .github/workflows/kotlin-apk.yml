@@ -162,6 +162,7 @@ jobs:
         body: |
           APK built from kotlin-version branch
           Build #${{ github.run_number }}
-      files: fixed_code/bin/*.apk
+        files: |
+          fixed_code/bin/*.apk
 
     timeout-minutes: 120
