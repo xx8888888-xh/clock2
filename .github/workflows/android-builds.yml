@@ -1,0 +1,123 @@
+name: Android APK Build
+
+on:
+  push:
+    branches: [ architecture-rework, main ]
+  pull_request:
+    branches: [ architecture-rework, main ]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            openjdk-17-jdk \
+            autoconf \
+            libtool \
+            pkg-config \
+            zlib1g-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            libtinfo6 \
+            cmake \
+            libffi-dev \
+            libssl-dev
+
+      - name: Set environment variables
+        run: |
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> ~/.bashrc
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> ~/.bashrc
+          echo "PATH=$JAVA_HOME/bin:$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools:$PATH" >> ~/.bashrc
+
+      - name: Download Android SDK command line tools
+        run: |
+          mkdir -p $HOME/android-sdk/cmdline-tools
+          cd $HOME/android-sdk/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip
+          mv cmdline-tools latest
+          rm cmdline-tools.zip
+
+      - name: Accept Android SDK licenses
+        run: |
+          source ~/.bashrc
+          yes | sdkmanager --licenses 2>/dev/null || true
+
+      - name: Install Android SDK and NDK components
+        run: |
+          source ~/.bashrc
+          sdkmanager --install \
+            "platforms;android-33" \
+            "platform-tools" \
+            "build-tools;33.0.2" \
+            "ndk;25.2.9519653" 2>&1 | tail -5
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install buildozer cython==0.29.36
+
+      - name: Configure build
+        run: |
+          cp buildozer_android.spec buildozer.spec
+          ls -lh icon.png
+
+      - name: Build APK
+        run: |
+          source ~/.bashrc
+          echo "NDK=$ANDROID_NDK_HOME"
+          echo "SDK=$ANDROID_SDK_ROOT"
+          buildozer android debug 2>&1 | tee build.log
+          echo "Exit: $?"
+
+      - name: Show build log tail
+        if: always()
+        run: |
+          echo "=== Build log (last 100 lines) ==="
+          tail -100 build.log 2>/dev/null || echo "No build log"
+          echo "=== bin/ directory ==="
+          ls -lhR bin/ 2>/dev/null || echo "No bin/ directory"
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: petalarm-debug-apk
+          path: bin/*.apk
+          retention-days: 5
+
+      - name: Verify APK size
+        if: success()
+        run: |
+          APK=$(ls bin/*.apk 2>/dev/null | head -1)
+          if [ -n "$APK" ]; then
+            SIZE=$(stat -c%s "$APK")
+            SIZE_MB=$(echo "scale=2; $SIZE/1048576" | bc)
+            echo "APK: $APK"
+            echo "Size: $SIZE bytes (${SIZE_MB} MB)"
+            if [ "$SIZE" -lt 5242880 ]; then
+              echo "WARNING: APK is smaller than 5MB"
+              exit 1
+            else
+              echo "SUCCESS: APK is ${SIZE_MB} MB"
+            fi
+          else
+            echo "ERROR: No APK found in bin/"
+            exit 1
+          fi
