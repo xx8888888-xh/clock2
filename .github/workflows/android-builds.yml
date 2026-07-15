@@ -40,33 +40,20 @@ jobs:
       - name: Set environment variables
         run: |
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
-          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> ~/.bashrc
-          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> ~/.bashrc
-          echo "PATH=$JAVA_HOME/bin:$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools:$PATH" >> ~/.bashrc
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724" >> $GITHUB_ENV
+          echo "PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH" >> $GITHUB_ENV
 
-      - name: Download Android SDK command line tools
+      - name: Show available Android SDK
         run: |
-          mkdir -p $HOME/android-sdk/cmdline-tools
-          cd $HOME/android-sdk/cmdline-tools
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
-          unzip -q cmdline-tools.zip
-          mv cmdline-tools latest
-          rm cmdline-tools.zip
+          echo "SDK: $ANDROID_SDK_ROOT"
+          ls -la $ANDROID_SDK_ROOT/
+          echo "--- NDK ---"
+          ls -la $ANDROID_SDK_ROOT/ndk/ 2>/dev/null || echo "No NDK dir"
 
       - name: Accept Android SDK licenses
         run: |
-          source ~/.bashrc
-          yes | sdkmanager --licenses 2>/dev/null || true
-
-      - name: Install Android SDK and NDK components
-        run: |
-          source ~/.bashrc
-          sdkmanager --install \
-            "platforms;android-33" \
-            "platform-tools" \
-            "build-tools;33.0.2" \
-            "ndk;25.2.9519653" 2>&1 | tail -5
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
 
       - name: Install Python dependencies
         run: |
@@ -76,13 +63,23 @@ jobs:
       - name: Configure build
         run: |
           cp buildozer_android.spec buildozer.spec
+          # Tell buildozer to use the pre-installed SDK/NDK and not re-download
+          mkdir -p .buildozer
+          echo "android.ndk_api = 21" >> buildozer.spec
+          echo "android.allow_backup = True" >> buildozer.spec
           ls -lh icon.png
+          cat buildozer.spec | grep -E "^android\.(api|ndk|minapi|archs|sdk)"
 
       - name: Build APK
         run: |
-          source ~/.bashrc
-          echo "NDK=$ANDROID_NDK_HOME"
-          echo "SDK=$ANDROID_SDK_ROOT"
+          export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
+          export ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724
+          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+          export PATH=$JAVA_HOME/bin:$PATH
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+          echo "JAVA_HOME=$JAVA_HOME"
+          # Use pre-installed NDK version (27.3.13750724)
           buildozer android debug 2>&1 | tee build.log
           echo "Exit: $?"
 
