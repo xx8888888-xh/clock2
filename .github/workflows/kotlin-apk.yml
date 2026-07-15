@@ -1,0 +1,167 @@
+name: Kotlin Branch APK Build
+
+on:
+  push:
+    branches:
+      - kotlin-version
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Verify project structure
+      run: |
+        echo "=== Project files ==="
+        ls -la fixed_code/
+        echo ""
+        echo "main.py lines: $(wc -l < fixed_code/main.py)"
+        echo "buildozer.spec: $(test -f fixed_code/buildozer.spec && echo 'exists' || echo 'missing')"
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          python3-pip build-essential git ffmpeg \
+          libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
+          libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
+          zlib1g-dev libgstreamer1.0-0 \
+          autoconf automake libtool pkg-config libffi-dev libssl-dev liblzma-dev \
+          unzip wget cmake openjdk-17-jdk
+
+    - name: Set up Java 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Install Python dependencies
+      run: |
+        pip install --upgrade pip setuptools wheel
+        pip install cython==0.29.36
+        pip install kivy==2.3.0
+        pip install pillow plyer requests
+        pip install buildozer==1.6.0
+
+    - name: Setup Android SDK
+      run: |
+        export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+        mkdir -p $ANDROID_SDK_ROOT
+
+        mkdir -p $ANDROID_SDK_ROOT/licenses
+        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/android-sdk-license
+        echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_SDK_ROOT/licenses/android-sdk-preview-license
+
+        if [ ! -d "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" ]; then
+          cd /tmp
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline.zip
+          unzip -q cmdline.zip
+          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+          mv cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
+        fi
+
+        mkdir -p $ANDROID_SDK_ROOT/tools/bin
+        ln -sf $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $ANDROID_SDK_ROOT/tools/bin/sdkmanager 2>/dev/null || true
+
+        $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT \
+          "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+    - name: Setup Android NDK r25b
+      run: |
+        export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+        NDK_DIR=$HOME/.buildozer/android/platform/android-ndk-r25b
+
+        if [ ! -d "$NDK_DIR" ]; then
+          cd /tmp
+          wget -q https://dl.google.com/android/repository/android-ndk-r25b-linux.zip -O ndk.zip
+          unzip -q ndk.zip
+          mv android-ndk-r25b $NDK_DIR
+          rm ndk.zip
+        fi
+
+        NDK_FLAGS=$NDK_DIR/build/cmake/flags.cmake
+        if [ -f "$NDK_FLAGS" ]; then
+          if grep -q "IN_LIST" "$NDK_FLAGS"; then
+            echo "Patching NDK flags.cmake..."
+            sed -i 's/if( arg IN_LIST ANDROID_SANITIZE )/# PATCHED: IN_LIST issue/' "$NDK_FLAGS"
+          fi
+        fi
+
+    - name: Build APK with buildozer
+      env:
+        BUILDOZER_WARN_ON_ROOT: '0'
+        ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
+        ANDROID_NDK_ROOT: /home/runner/.buildozer/android/platform/android-ndk-r25b
+        ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-r25b
+      run: |
+        export ANDROID_SDK_ROOT=/home/runner/.buildozer/android/platform/android-sdk
+        export ANDROID_NDK_ROOT=/home/runner/.buildozer/android/platform/android-ndk-r25b
+        export ANDROID_NDK_HOME=/home/runner/.buildozer/android/platform/android-ndk-r25b
+
+        cd fixed_code
+        rm -rf bin/ .buildozer/
+        mkdir -p bin/
+
+        echo "=== Building APK (20-40 min) ==="
+        timeout 2700 buildozer android debug || BUILD_EXIT=$?
+
+        if [ -f "bin/"*.apk 2>/dev/null ]; then
+          echo "=== APK build SUCCESS ==="
+          ls -lh bin/*.apk
+        else
+          echo "=== APK build FAILED ==="
+          exit 1
+        fi
+
+    - name: Verify APK
+      run: |
+        APK_FILE=$(ls fixed_code/bin/*.apk 2>/dev/null | head -1)
+        if [ -f "$APK_FILE" ]; then
+          echo "=== APK verification ==="
+          ls -lh "$APK_FILE"
+          SIZE=$(stat -c%s "$APK_FILE")
+          echo "APK size: $SIZE bytes ($(( SIZE / 1024 / 1024 )) MB)"
+          DEX_COUNT=$(unzip -l "$APK_FILE" 2>/dev/null | grep -c "classes.dex" || echo 0)
+          SO_COUNT=$(unzip -l "$APK_FILE" 2>/dev/null | grep -c "\.so" || echo 0)
+          echo "DEX files: $DEX_COUNT, SO libraries: $SO_COUNT"
+          if [ "$DEX_COUNT" -gt 0 ]; then
+            echo "✅ APK contains real DEX compiled code"
+          fi
+          if [ "$SIZE" -gt 5242880 ]; then
+            echo "✅ APK size > 5MB: $(( SIZE / 1024 / 1024 )) MB"
+          else
+            echo "⚠️ APK size < 5MB"
+          fi
+        fi
+
+    - name: Upload APK
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: clock2-kotlin-apk
+        path: fixed_code/bin/*.apk
+        retention-days: 7
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      if: success() && github.event_name == 'workflow_dispatch'
+      with:
+        tag_name: kotlin-version-${{ github.run_number }}
+        name: Clock2 Kotlin Version APK
+        body: |
+          APK built from kotlin-version branch
+          Build #${{ github.run_number }}
+      files: fixed_code/bin/*.apk
+
+    timeout-minutes: 120
