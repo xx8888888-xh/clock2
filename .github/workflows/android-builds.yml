@@ -35,8 +35,7 @@ jobs:
             libtinfo6 \
             cmake \
             libffi-dev \
-            libssl-dev \
-            expect
+            libssl-dev
 
       - name: Set environment variables
         run: |
@@ -45,10 +44,30 @@ jobs:
           echo "PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH" >> ~/.bashrc
           echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=/usr/local/lib/android/sdk/ndk/27.3.13750724" >> $GITHUB_ENV
 
-      - name: Accept system SDK licenses
+      - name: Show system SDK contents
+        run: |
+          echo "=== System SDK ==="
+          ls /usr/local/lib/android/sdk/
+          echo "=== System NDK ==="
+          ls /usr/local/lib/android/sdk/ndk/
+          echo "=== cmdline-tools ==="
+          ls /usr/local/lib/android/sdk/cmdline-tools/
+
+      - name: Accept SDK licenses
         run: |
           yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
+
+      - name: Create buildozer SDK symlink
+        run: |
+          # Symlink buildozer's expected SDK path to the pre-installed system SDK
+          # so buildozer uses the system SDK (which has tools + licenses ready)
+          mkdir -p /home/runner/.buildozer/android/platform
+          ln -sfn /usr/local/lib/android/sdk /home/runner/.buildozer/android/platform/android-sdk
+          echo "Symlink created: $(ls -la /home/runner/.buildozer/android/platform/android-sdk)"
+          # Verify cmdline-tools are accessible
+          ls /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/
 
       - name: Install Python dependencies
         run: |
@@ -60,21 +79,6 @@ jobs:
           cp buildozer_android.spec buildozer.spec
           ls -lh icon.png
 
-      - name: Accept buildozer SDK licenses
-        run: |
-          # Pre-create the buildozer SDK directory and accept licenses
-          # so buildozer doesn't prompt during build
-          BUILDOZER_SDK="$HOME/.buildozer/android/platform/android-sdk"
-          mkdir -p "$BUILDOZER_SDK/cmdline-tools"
-          if [ ! -f "$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
-            cd "$BUILDOZER_SDK/cmdline-tools"
-            wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
-            unzip -q cmdline-tools.zip
-            mv cmdline-tools latest
-            rm cmdline-tools.zip
-          fi
-          yes | "$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$BUILDOZER_SDK" --licenses 2>/dev/null || true
-
       - name: Build APK
         run: |
           source ~/.bashrc
@@ -82,25 +86,27 @@ jobs:
           export PATH=$JAVA_HOME/bin:$PATH
           export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
           export ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724
+          export ANDROID_NDK_ROOT=/usr/local/lib/android/sdk/ndk/27.3.13750724
           export ANDROID_HOME=/usr/local/lib/android/sdk
+          echo "=== Env ==="
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
-          echo "ANDROID_HOME=$ANDROID_HOME"
           echo "JAVA_HOME=$JAVA_HOME"
-          # Run buildozer without pipe so exit code is captured
+          echo "=== Verify buildozer SDK symlink ==="
+          ls -la /home/runner/.buildozer/android/platform/android-sdk/ | head -5
+          echo "=== Verify sdkmanager ==="
+          /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --list 2>&1 | head -5
+          echo "=== Starting buildozer ==="
           buildozer android debug 2>&1 | tee build.log
-          BUILDOZER_EXIT=${PIPESTATUS[0]}
-          echo "BUILDOZER_EXIT=$BUILDOZER_EXIT"
+          echo "Exit: $?"
 
       - name: Show build log tail
         if: always()
         run: |
-          echo "=== Build log (last 150 lines) ==="
-          tail -150 build.log 2>/dev/null || echo "No build log"
+          echo "=== Build log (last 200 lines) ==="
+          tail -200 build.log 2>/dev/null || echo "No build log"
           echo "=== bin/ directory ==="
           ls -lhR bin/ 2>/dev/null || echo "No bin/ directory"
-          echo "=== Build log grep for APK/apk ==="
-          grep -n "apk\|APK\|bin/" build.log 2>/dev/null | head -20 || true
 
       - name: Upload APK
         if: success()
