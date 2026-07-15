@@ -49,10 +49,10 @@ jobs:
     - name: Install Python dependencies
       run: |
         pip install --upgrade pip setuptools wheel
-        pip install cython==0.29.36
         pip install kivy==2.3.0
         pip install pillow plyer requests
-        pip install buildozer==1.6.0
+        pip install Cython==3.0.11
+        pip install --no-deps buildozer==1.6.0
 
     - name: Setup Android SDK
       run: |
