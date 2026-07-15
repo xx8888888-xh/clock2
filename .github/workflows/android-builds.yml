@@ -65,12 +65,13 @@ jobs:
           mkdir -p /home/runner/.buildozer/android/platform
           ln -sfn /usr/local/lib/android/sdk /home/runner/.buildozer/android/platform/android-sdk
           echo "Symlink created: $(ls -la /home/runner/.buildozer/android/platform/android-sdk)"
-          # buildozer also looks for tools/bin/sdkmanager -> create that symlink too
-          mkdir -p /home/runner/.buildozer/android/platform/android-sdk/tools
-          ln -sfn /usr/local/lib/android/sdk/cmdline-tools/latest /home/runner/.buildozer/android/platform/android-sdk/tools/bin
-          echo "tools/bin symlink: $(ls -la /home/runner/.buildozer/android/platform/android-sdk/tools/bin)"
-          # Verify both paths exist
-          ls /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/ 2>/dev/null || echo "no cmdline-tools"
+          # buildozer looks for android-sdk/tools/bin/sdkmanager
+          # The actual sdkmanager is at cmdline-tools/latest/bin/sdkmanager
+          # Create tools/bin dir and symlink the actual binary
+          mkdir -p /home/runner/.buildozer/android/platform/android-sdk/tools/bin
+          ln -sf /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+          echo "tools/bin symlink: $(ls -la /home/runner/.buildozer/android/platform/android-sdk/tools/bin/)"
+          # Verify
           ls /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager 2>/dev/null && echo "sdkmanager found at tools/bin" || echo "sdkmanager NOT found"
 
       - name: Install Python dependencies
