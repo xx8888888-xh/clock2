@@ -76,11 +76,7 @@ jobs:
           cp buildozer_android.spec buildozer.spec
           # Ensure icon.png exists
           if [ ! -f icon.png ]; then
-            python3 -c "
-from PIL import Image
-img = Image.new('RGBA', (512, 512), (255, 100, 150, 255))
-img.save('icon.png')
-" 2>/dev/null || convert -size 512x512 xc:'#FF6496' icon.png 2>/dev/null || echo "icon placeholder" > icon.png
+            python3 -c "from PIL import Image; img = Image.new('RGBA', (512, 512), (255, 100, 150, 255)); img.save('icon.png')" 2>/dev/null || echo 'icon placeholder' > icon.png
           fi
 
       - name: Build APK
