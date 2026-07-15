@@ -23,6 +23,7 @@ android.api = 33
 android.minapi = 21
 android.target_api = 33
 android.ndk_api = 21
+android.ndk = 27.3.13750724
 android.archs = armeabi-v7a, arm64-v8a
 
 # Android窗口配置
