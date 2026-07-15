@@ -10,7 +10,7 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
@@ -35,25 +35,20 @@ jobs:
             libtinfo6 \
             cmake \
             libffi-dev \
-            libssl-dev
+            libssl-dev \
+            expect
 
       - name: Set environment variables
         run: |
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> ~/.bashrc
+          echo "PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH" >> ~/.bashrc
           echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724" >> $GITHUB_ENV
-          echo "PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH" >> $GITHUB_ENV
 
-      - name: Show available Android SDK
+      - name: Accept system SDK licenses
         run: |
-          echo "SDK: $ANDROID_SDK_ROOT"
-          ls -la $ANDROID_SDK_ROOT/
-          echo "--- NDK ---"
-          ls -la $ANDROID_SDK_ROOT/ndk/ 2>/dev/null || echo "No NDK dir"
-
-      - name: Accept Android SDK licenses
-        run: |
-          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
+          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
 
       - name: Install Python dependencies
         run: |
@@ -63,33 +58,49 @@ jobs:
       - name: Configure build
         run: |
           cp buildozer_android.spec buildozer.spec
-          # Tell buildozer to use the pre-installed SDK/NDK and not re-download
-          mkdir -p .buildozer
-          echo "android.ndk_api = 21" >> buildozer.spec
-          echo "android.allow_backup = True" >> buildozer.spec
           ls -lh icon.png
-          cat buildozer.spec | grep -E "^android\.(api|ndk|minapi|archs|sdk)"
+
+      - name: Accept buildozer SDK licenses
+        run: |
+          # Pre-create the buildozer SDK directory and accept licenses
+          # so buildozer doesn't prompt during build
+          BUILDOZER_SDK="$HOME/.buildozer/android/platform/android-sdk"
+          mkdir -p "$BUILDOZER_SDK/cmdline-tools"
+          if [ ! -f "$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
+            cd "$BUILDOZER_SDK/cmdline-tools"
+            wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+            unzip -q cmdline-tools.zip
+            mv cmdline-tools latest
+            rm cmdline-tools.zip
+          fi
+          yes | "$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager" --sdk_root="$BUILDOZER_SDK" --licenses 2>/dev/null || true
 
       - name: Build APK
         run: |
-          export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
-          export ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724
+          source ~/.bashrc
           export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
           export PATH=$JAVA_HOME/bin:$PATH
+          export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
+          export ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724
+          export ANDROID_HOME=/usr/local/lib/android/sdk
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+          echo "ANDROID_HOME=$ANDROID_HOME"
           echo "JAVA_HOME=$JAVA_HOME"
-          # Use pre-installed NDK version (27.3.13750724)
+          # Run buildozer without pipe so exit code is captured
           buildozer android debug 2>&1 | tee build.log
-          echo "Exit: $?"
+          BUILDOZER_EXIT=${PIPESTATUS[0]}
+          echo "BUILDOZER_EXIT=$BUILDOZER_EXIT"
 
       - name: Show build log tail
         if: always()
         run: |
-          echo "=== Build log (last 100 lines) ==="
-          tail -100 build.log 2>/dev/null || echo "No build log"
+          echo "=== Build log (last 150 lines) ==="
+          tail -150 build.log 2>/dev/null || echo "No build log"
           echo "=== bin/ directory ==="
           ls -lhR bin/ 2>/dev/null || echo "No bin/ directory"
+          echo "=== Build log grep for APK/apk ==="
+          grep -n "apk\|APK\|bin/" build.log 2>/dev/null | head -20 || true
 
       - name: Upload APK
         if: success()
