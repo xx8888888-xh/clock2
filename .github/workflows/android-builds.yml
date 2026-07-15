@@ -1,175 +1,136 @@
-name: Android悬浮窗架构测试
+name: Android APK Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ architecture-rework, main ]
   pull_request:
-    branches: [ main ]
+    branches: [ architecture-rework, main ]
   workflow_dispatch:
-    inputs:
-      architecture:
-        description: '架构版本 (simple|stable|full)'
-        required: true
-        default: 'stable'
 
 jobs:
-  build-android-simple:
-    name: 构建最简单架构
+  build-android:
     runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: 设置Python环境
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    
-    - name: 安装Buildozer
-      run: |
-        pip install buildozer
-    
-    - name: 配置最简单的架构
-      run: |
-        # 复制最简单架构的main.py
-        cp simplest_main.py main.py
-        
-        # 复制buildozer配置
-        cp buildozer_android.spec buildozer.spec
-    
-    - name: 构建APK
-      run: |
-        buildozer android debug
-    
-    - name: 上传APK（最简单架构）
-      uses: actions/upload-artifact@v3
-      with:
-        name: clock2-simple-apk
-        path: bin/*.apk
-      
-    - name: 输出构建日志
-      if: always()
-      run: |
-        if [ -f .buildozer/android/platform/build.log ]; then
-          cat .buildozer/android/platform/build.log | tail -100
-        fi
 
-  build-android-stable:
-    name: 构建稳定架构
-    runs-on: ubuntu-latest
-    
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: 设置Python环境
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    
-    - name: 安装Buildozer
-      run: |
-        pip install buildozer
-    
-    - name: 配置稳定架构
-      run: |
-        # 复制稳定架构的main.py
-        cp android_stable_main.py main.py
-        
-        # 复制buildozer配置
-        cp buildozer_android.spec buildozer.spec
-    
-    - name: 构建APK
-      run: |
-        buildozer android debug
-    
-    - name: 上传APK（稳定架构）
-      uses: actions/upload-artifact@v3
-      with:
-        name: clock2-stable-apk
-        path: bin/*.apk
-      
-    - name: 输出构建日志
-      if: always()
-      run: |
-        if [ -f .buildozer/android/platform/build.log ]; then
-          cat .buildozer/android/platform/build.log | tail -100
-        fi
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  build-android-full:
-    name: 构建完整架构
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: 设置Python环境
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    
-    - name: 安装Buildozer
-      run: |
-        pip install buildozer
-    
-    - name: 配置完整架构
-      run: |
-        # 使用原来的main.py（功能完整）
-        # 保持原样
-        
-        # 复制buildozer配置
-        cp buildozer_android.spec buildozer.spec
-    
-    - name: 构建APK
-      run: |
-        buildozer android debug
-    
-    - name: 上传APK（完整架构）
-      uses: actions/upload-artifact@v3
-      with:
-        name: clock2-full-apk
-        path: bin/*.apk
-      
-    - name: 输出构建日志
-      if: always()
-      run: |
-        if [ -f .buildozer/android/platform/build.log ]; then
-          cat .buildozer/android/platform/build.log | tail -100
-        fi
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-  create-release:
-    name: 创建多个架构版本
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: 下载所有APK
-      uses: actions/download-artifact@v3
-      with:
-        pattern: clock2-*-apk
-        path: artifacts
-    
-    - name: 创建版本说明
-      run: |
-        echo "# 宠物闹钟 - 多架构测试版本" > release_notes.md
-        echo "" >> release_notes.md
-        echo "## 架构说明" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "1. **简单架构** (clock2-simple.apk):" >> release_notes.md
-        echo "   - 最简单的窗口创建" >> release_notes.md
-        echo "   - 透明度固定为0.01" >> release_notes.md
-        echo "   - 延迟初始化" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "2. **稳定架构** (clock2-stable.apk):" >> release_notes.md
-        echo "   - Android Service支持" >> release_notes.md
-        echo "   - 渐进式初始化" >> release_notes.md
-        echo "   - 窗口验证" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "3. **完整架构** (clock2-full.apk):" >> release_notes.md
-        echo "   - 原功能完整版本" >> release_notes.md
-        echo "   - 闹钟功能" >> release_notes.md
-        echo "   - 宠物动画" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "## 测试建议" >> release_notes.md
-        echo "" >> release_notes.md
-        echo "1. 先测试简单架构" >> release_notes.md
-        echo "2. 如果窗口可见，再测试稳定架构" >> release_notes.md
-        echo "3. 最后测试完整架构" >> release_notes.md
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            python3-dev \
+            python3-pip \
+            git \
+            zip \
+            unzip \
+            openjdk-17-jdk \
+            autoconf \
+            libtool \
+            pkg-config \
+            zlib1g-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            libtinfo5 \
+            cmake \
+            libffi-dev \
+            libssl-dev
+
+      - name: Set JAVA_HOME
+        run: |
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> ~/.bashrc
+          echo "PATH=$JAVA_HOME/bin:$PATH" >> ~/.bashrc
+
+      - name: Download Android SDK
+        run: |
+          mkdir -p $HOME/android-sdk/cmdline-tools
+          cd $HOME/android-sdk/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
+          unzip -q cmdline-tools.zip
+          mv cmdline-tools latest
+          rm cmdline-tools.zip
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> ~/.bashrc
+          echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools:$PATH" >> ~/.bashrc
+
+      - name: Accept Android SDK licenses
+        run: |
+          source ~/.bashrc
+          yes | sdkmanager --licenses 2>/dev/null || true
+          sdkmanager --install "platforms;android-34" "build-tools;34.0.0" "platform-tools" 2>&1 | tail -5
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install buildozer cython==0.29.36
+
+      - name: Configure build
+        run: |
+          # Use simplest_main.py as the main entry point
+          cp buildozer_android.spec buildozer.spec
+          # Ensure icon.png exists
+          if [ ! -f icon.png ]; then
+            python3 -c "
+from PIL import Image
+img = Image.new('RGBA', (512, 512), (255, 100, 150, 255))
+img.save('icon.png')
+" 2>/dev/null || convert -size 512x512 xc:'#FF6496' icon.png 2>/dev/null || echo "icon placeholder" > icon.png
+          fi
+
+      - name: Build APK
+        run: |
+          source ~/.bashrc
+          export ANDROID_NDK_HOME="$HOME/android-sdk/ndk/25.2.9519653"
+          export ANDROID_NDK_API_LEVEL=21
+
+          # Download and extract NDK if not present
+          if [ ! -d "$ANDROID_NDK_HOME" ]; then
+            mkdir -p $HOME/android-sdk/ndk
+            cd $HOME/android-sdk/ndk
+            wget -q https://dl.google.com/android/repository/android-ndk-r25c-linux.zip -O ndk.zip
+            unzip -q ndk.zip
+            mv android-ndk-r25c $ANDROID_NDK_HOME
+            rm ndk.zip
+          fi
+
+          echo "NDK=$ANDROID_NDK_HOME"
+          echo "SDK=$ANDROID_SDK_ROOT"
+
+          buildozer android debug --verbose 2>&1 | tee build.log
+
+      - name: Show build log tail
+        if: always()
+        run: |
+          echo "=== Build log (last 80 lines) ==="
+          tail -80 build.log 2>/dev/null || echo "No build log found"
+          echo "=== bin/ directory ==="
+          ls -lh bin/ 2>/dev/null || echo "No bin/ directory"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: petalarm-debug-apk
+          path: bin/*.apk
+          retention-days: 5
+
+      - name: Verify APK size
+        run: |
+          APK=$(ls bin/*.apk 2>/dev/null | head -1)
+          if [ -n "$APK" ]; then
+            SIZE=$(stat -c%s "$APK")
+            echo "APK: $APK"
+            echo "Size: $SIZE bytes ($(echo "scale=2; $SIZE/1048576" | bc) MB)"
+            if [ "$SIZE" -lt 5242880 ]; then
+              echo "WARNING: APK is smaller than 5MB"
+              exit 1
+            fi
+          else
+            echo "ERROR: No APK found in bin/"
+            exit 1
+          fi
