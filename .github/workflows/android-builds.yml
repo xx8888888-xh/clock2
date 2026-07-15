@@ -27,6 +27,7 @@ jobs:
           sudo apt install -y \
             openjdk-17-jdk \
             autoconf \
+            automake \
             libtool \
             pkg-config \
             zlib1g-dev \
@@ -102,8 +103,16 @@ jobs:
           echo "=== Verify sdkmanager ==="
           /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --list 2>&1 | head -5
           echo "=== Starting buildozer ==="
+          set -o pipefail
           buildozer android debug 2>&1 | tee build.log
-          echo "Exit: $?"
+          BUILDOZER_EXIT=$?
+          echo "BUILDOZER_EXIT=$BUILDOZER_EXIT"
+          if [ "$BUILDOZER_EXIT" -ne 0 ] || ! ls bin/*.apk 2>/dev/null; then
+            echo "Buildozer failed or no APK produced, checking build.log for errors..."
+            grep -n "Error\|error\|failed\|Failed\|ERROR\|recipe" build.log | grep -v "^2026\|\.py.*Error\|log_level" | tail -20
+            exit 1
+          fi
+          echo "Build succeeded"
 
       - name: Show build log tail
         if: always()
