@@ -52,6 +52,7 @@ jobs:
         pip install kivy==2.3.0
         pip install pillow plyer requests
         pip install Cython==3.0.11
+        pip install pexpect
         pip install --no-deps buildozer==1.6.0
 
     - name: Setup Android SDK
