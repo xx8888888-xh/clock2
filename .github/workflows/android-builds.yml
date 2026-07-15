@@ -41,39 +41,29 @@ jobs:
       - name: Set environment variables
         run: |
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
-          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> ~/.bashrc
-          echo "PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH" >> ~/.bashrc
+          echo "PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724" >> $GITHUB_ENV
           echo "ANDROID_NDK_ROOT=/usr/local/lib/android/sdk/ndk/27.3.13750724" >> $GITHUB_ENV
-
-      - name: Show system SDK contents
-        run: |
-          echo "=== System SDK ==="
-          ls /usr/local/lib/android/sdk/
-          echo "=== System NDK ==="
-          ls /usr/local/lib/android/sdk/ndk/
-          echo "=== cmdline-tools ==="
-          ls /usr/local/lib/android/sdk/cmdline-tools/
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
 
       - name: Accept SDK licenses
         run: |
           yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
 
-      - name: Create buildozer SDK symlinks
+      - name: Create buildozer SDK + NDK symlinks
         run: |
-          # Symlink buildozer's expected SDK path to the pre-installed system SDK
           mkdir -p /home/runner/.buildozer/android/platform
+          # Symlink SDK so buildozer finds it without downloading
           ln -sfn /usr/local/lib/android/sdk /home/runner/.buildozer/android/platform/android-sdk
-          echo "Symlink created: $(ls -la /home/runner/.buildozer/android/platform/android-sdk)"
-          # buildozer looks for android-sdk/tools/bin/sdkmanager
-          # The actual sdkmanager is at cmdline-tools/latest/bin/sdkmanager
-          # Create tools/bin dir and symlink the actual binary
+          # Symlink NDK so buildozer uses pre-installed NDK instead of downloading r28c
+          ln -sfn /usr/local/lib/android/sdk/ndk/27.3.13750724 /home/runner/.buildozer/android/platform/android-ndk-27.3.13750724
+          echo "=== SDK ===" && ls /home/runner/.buildozer/android/platform/android-sdk/ | head -5
+          echo "=== NDK ===" && ls /home/runner/.buildozer/android/platform/android-ndk-27.3.13750724/ | head -5
+          # Also symlink sdkmanager for buildozer's expected path
           mkdir -p /home/runner/.buildozer/android/platform/android-sdk/tools/bin
-          ln -sf /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
-          echo "tools/bin symlink: $(ls -la /home/runner/.buildozer/android/platform/android-sdk/tools/bin/)"
-          # Verify
-          ls /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager 2>/dev/null && echo "sdkmanager found at tools/bin" || echo "sdkmanager NOT found"
+          ln -sf /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager \
+            /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
 
       - name: Install Python dependencies
         run: |
@@ -87,29 +77,28 @@ jobs:
 
       - name: Build APK
         run: |
-          source ~/.bashrc
           export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
           export PATH=$JAVA_HOME/bin:$PATH
           export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
           export ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724
           export ANDROID_NDK_ROOT=/usr/local/lib/android/sdk/ndk/27.3.13750724
           export ANDROID_HOME=/usr/local/lib/android/sdk
+          export ANDROIDSDK=/home/runner/.buildozer/android/platform/android-sdk
+          export ANDROIDNDK=/home/runner/.buildozer/android/platform/android-ndk-27.3.13750724
           echo "=== Env ==="
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
-          echo "JAVA_HOME=$JAVA_HOME"
-          echo "=== Verify buildozer SDK symlink ==="
-          ls -la /home/runner/.buildozer/android/platform/android-sdk/ | head -5
-          echo "=== Verify sdkmanager ==="
-          /home/runner/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --list 2>&1 | head -5
+          echo "ANDROIDSDK=$ANDROIDSDK"
+          echo "ANDROIDNDK=$ANDROIDNDK"
           echo "=== Starting buildozer ==="
           set -o pipefail
           buildozer android debug 2>&1 | tee build.log
           BUILDOZER_EXIT=$?
           echo "BUILDOZER_EXIT=$BUILDOZER_EXIT"
           if [ "$BUILDOZER_EXIT" -ne 0 ] || ! ls bin/*.apk 2>/dev/null; then
-            echo "Buildozer failed or no APK produced, checking build.log for errors..."
-            grep -n "Error\|error\|failed\|Failed\|ERROR\|recipe" build.log | grep -v "^2026\|\.py.*Error\|log_level" | tail -20
+            echo "=== Checking build.log for errors ==="
+            grep -n "Error\|error\|failed\|Failed\|ERROR\|recipe\|Command failed\|Error code" build.log | \
+              grep -v "^2026\|\.py.*Error\|log_level\|DEBUG" | tail -30
             exit 1
           fi
           echo "Build succeeded"
