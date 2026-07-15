@@ -36,7 +36,7 @@ jobs:
             zlib1g-dev \
             libncurses5-dev \
             libncursesw5-dev \
-            libtinfo5 \
+            libtinfo6 \
             cmake \
             libffi-dev \
             libssl-dev
@@ -44,8 +44,10 @@ jobs:
       - name: Set JAVA_HOME
         run: |
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
           echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> ~/.bashrc
-          echo "PATH=$JAVA_HOME/bin:$PATH" >> ~/.bashrc
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> ~/.bashrc
+          echo "PATH=$JAVA_HOME/bin:$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools:$PATH" >> ~/.bashrc
 
       - name: Download Android SDK
         run: |
@@ -55,15 +57,26 @@ jobs:
           unzip -q cmdline-tools.zip
           mv cmdline-tools latest
           rm cmdline-tools.zip
-          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> ~/.bashrc
-          echo "PATH=$HOME/android-sdk/cmdline-tools/latest/bin:$HOME/android-sdk/platform-tools:$PATH" >> ~/.bashrc
 
-      - name: Accept Android SDK licenses
+      - name: Accept Android SDK licenses and install components
         run: |
           source ~/.bashrc
           yes | sdkmanager --licenses 2>/dev/null || true
           sdkmanager --install "platforms;android-34" "build-tools;34.0.0" "platform-tools" 2>&1 | tail -5
+
+      - name: Download and install Android NDK
+        run: |
+          source ~/.bashrc
+          export ANDROID_NDK_HOME="$HOME/android-sdk/ndk/25.2.9519653"
+          if [ ! -d "$ANDROID_NDK_HOME" ]; then
+            mkdir -p $HOME/android-sdk/ndk
+            cd $HOME/android-sdk/ndk
+            wget -q https://dl.google.com/android/repository/android-ndk-r25c-linux.zip -O ndk.zip
+            unzip -q ndk.zip
+            mv android-ndk-r25c $ANDROID_NDK_HOME
+            rm ndk.zip
+            echo "NDK installed at: $ANDROID_NDK_HOME"
+          fi
 
       - name: Install Python dependencies
         run: |
@@ -72,33 +85,17 @@ jobs:
 
       - name: Configure build
         run: |
-          # Use simplest_main.py as the main entry point
           cp buildozer_android.spec buildozer.spec
-          # Ensure icon.png exists
-          if [ ! -f icon.png ]; then
-            python3 -c "from PIL import Image; img = Image.new('RGBA', (512, 512), (255, 100, 150, 255)); img.save('icon.png')" 2>/dev/null || echo 'icon placeholder' > icon.png
-          fi
+          ls -lh icon.png
 
       - name: Build APK
         run: |
           source ~/.bashrc
           export ANDROID_NDK_HOME="$HOME/android-sdk/ndk/25.2.9519653"
           export ANDROID_NDK_API_LEVEL=21
-
-          # Download and extract NDK if not present
-          if [ ! -d "$ANDROID_NDK_HOME" ]; then
-            mkdir -p $HOME/android-sdk/ndk
-            cd $HOME/android-sdk/ndk
-            wget -q https://dl.google.com/android/repository/android-ndk-r25c-linux.zip -O ndk.zip
-            unzip -q ndk.zip
-            mv android-ndk-r25c $ANDROID_NDK_HOME
-            rm ndk.zip
-          fi
-
           echo "NDK=$ANDROID_NDK_HOME"
           echo "SDK=$ANDROID_SDK_ROOT"
-
-          buildozer android debug --verbose 2>&1 | tee build.log
+          buildozer android debug 2>&1 | tee build.log
 
       - name: Show build log tail
         if: always()
