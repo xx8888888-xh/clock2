@@ -1,4 +1,4 @@
-name: Android APK Build (v22 - fix spec NDK to 28c, not r28c)
+name: Android APK Build (v23 - fix SDK path + symlink tools)
 
 on:
   push:
@@ -27,41 +27,31 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Download SDK
+      - name: Download SDK to buildozer managed directory
         run: |
-          SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
-          mkdir -p $SDK_DIR
-          if [ ! -f "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" ]; then
+          # buildozer looks for SDK at ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+          BUILDOZER_SDK="$HOME/.buildozer/android/platform/android-sdk"
+          mkdir -p $BUILDOZER_SDK
+          
+          if [ ! -f "$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
+            echo "Downloading and installing SDK cmdline-tools..."
             cd /tmp && curl -sL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o cmdline.zip
-            unzip -q cmdline.zip && mkdir -p $SDK_DIR/cmdline-tools
-            mv cmdline-tools $SDK_DIR/cmdline-tools/latest && rm cmdline.zip
+            unzip -q cmdline.zip -d /tmp/sdk-unpack
+            mkdir -p $BUILDOZER_SDK/cmdline-tools
+            mv /tmp/sdk-unpack/cmdline-tools $BUILDOZER_SDK/cmdline-tools/latest
+            rm -rf /tmp/sdk-unpack cmdline.zip
           fi
+          
+          # Buildozer expects tools/bin/sdkmanager - create symlink
+          mkdir -p $BUILDOZER_SDK/tools/bin
+          ln -sfn $BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager $BUILDOZER_SDK/tools/bin/sdkmanager 2>/dev/null || true
+          
           export JAVA_HOME=$JAVA_HOME
-          yes | $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_DIR --licenses 2>/dev/null || true
-          $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_DIR \
+          yes | $BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager --sdk_root=$BUILDOZER_SDK --licenses 2>/dev/null || true
+          $BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager --sdk_root=$BUILDOZER_SDK \
             "platform-tools" "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -3
-
-      - name: Download NDK r28c into buildozer cache at exact path
-        run: |
-          export JAVA_HOME=$JAVA_HOME
-          SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
-          if [ ! -d "/tmp/android-ndk-r28c" ]; then
-            echo "Downloading NDK r28c..."
-            cd /tmp && curl -sL "https://dl.google.com/android/repository/android-ndk-r28c-linux.zip" -o ndk.zip
-            unzip -q ndk.zip && echo "NDK downloaded"
-          fi
-          BUILDOZER_NDK="$HOME/.buildozer/android/platform/android-ndk-27.3.13750724"
-          mkdir -p $(dirname $BUILDOZER_NDK)
-          rm -rf "$BUILDOZER_NDK"
-          cp -a /tmp/android-ndk-r28c/. $BUILDOZER_NDK/
-          mkdir -p $SDK_DIR/ndk
-          rm -rf $SDK_DIR/ndk/27.3.13750724
-          ln -sfn $BUILDOZER_NDK $SDK_DIR/ndk/27.3.13750724
-          echo "Pkg.Desc = Android NDK" > $BUILDOZER_NDK/source.properties
-          echo "Pkg.Revision = 27.3.13750724" >> $BUILDOZER_NDK/source.properties
-          echo "Pkg.BaseRevision = 28.2.13676358" >> $BUILDOZER_NDK/source.properties
-          echo "Pkg.ReleaseName = r28c" >> $BUILDOZER_NDK/source.properties
-          cat $BUILDOZER_NDK/source.properties
+          echo "=== SDK installed ==="
+          ls $BUILDOZER_SDK/
 
       - name: Install Python dependencies
         run: |
@@ -69,7 +59,7 @@ jobs:
           pip install cython==0.29.36
           pip install buildozer
 
-      - name: Configure build and fix NDK version in spec
+      - name: Configure build and fix NDK version
         run: |
           if [ -f buildozer_android.spec ]; then
             cp buildozer_android.spec buildozer.spec
@@ -79,13 +69,8 @@ jobs:
             echo "No spec file found"
           fi
           if [ -f buildozer.spec ]; then
-            echo "=== Before ==="
-            grep -n "android.ndk\|ndk_dir\|ndk_version" buildozer.spec || true
-            # Key: use "28c" NOT "r28c" because buildozer URL template adds "r" prefix
-            sed -i 's|android.ndk.*=.*r\?28c.*|android.ndk = 28c|' buildozer.spec
             sed -i 's|android.ndk.*=.*27\.3\.13750724|android.ndk = 28c|' buildozer.spec
-            echo "=== After ==="
-            grep -n "android.ndk" buildozer.spec || true
+            grep "^android.ndk" buildozer.spec || true
           fi
 
       - name: Build APK
@@ -96,10 +81,10 @@ jobs:
           export JAVA_HOME=$JAVA_HOME
           export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
           export ANDROID_HOME=$ANDROID_SDK_ROOT
-          export ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-27.3.13750724
-          export ANDROID_NDK_ROOT=$HOME/.buildozer/android/platform/android-ndk-27.3.13750724
           export BUILDOZER_WARN_ON_ROOT=0
-          echo "NDK: $(cat $ANDROID_NDK_HOME/source.properties)"
+          echo "SDK: $ANDROID_SDK_ROOT"
+          ls $ANDROID_SDK_ROOT/
+          echo "sdkmanager: $(which sdkmanager 2>/dev/null || echo 'not in PATH')"
           set -o pipefail
           buildozer android debug 2>&1 | tee build.log
           BUILDOZER_EXIT=$?
