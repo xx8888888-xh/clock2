@@ -1,4 +1,4 @@
-name: Android APK Build (v21 - fix spec NDK version)
+name: Android APK Build (v22 - fix spec NDK to 28c, not r28c)
 
 on:
   push:
@@ -79,11 +79,13 @@ jobs:
             echo "No spec file found"
           fi
           if [ -f buildozer.spec ]; then
-            echo "=== Before fix ==="
+            echo "=== Before ==="
             grep -n "android.ndk\|ndk_dir\|ndk_version" buildozer.spec || true
-            sed -i 's|android.ndk.*=.*27\.3\.13750724|android.ndk = r28c|' buildozer.spec
-            echo "=== After fix ==="
-            grep -n "android.ndk\|ndk_dir\|ndk_version" buildozer.spec || true
+            # Key: use "28c" NOT "r28c" because buildozer URL template adds "r" prefix
+            sed -i 's|android.ndk.*=.*r\?28c.*|android.ndk = 28c|' buildozer.spec
+            sed -i 's|android.ndk.*=.*27\.3\.13750724|android.ndk = 28c|' buildozer.spec
+            echo "=== After ==="
+            grep -n "android.ndk" buildozer.spec || true
           fi
 
       - name: Build APK
