@@ -1,4 +1,4 @@
-name: Android APK Build (v11 - patch cloned p4a)
+name: Android APK Build (v12 - find correct pip location)
 
 on:
   push:
@@ -61,6 +61,7 @@ jobs:
           pip install --upgrade pip setuptools wheel
           pip install cython==0.29.36
           pip install buildozer
+          pip show buildozer | grep Location
 
       - name: Configure build
         run: |
@@ -90,38 +91,38 @@ jobs:
           export ANDROID_NDK_ROOT=$HOME/.buildozer/android/platform/android-ndk-27.3.13750724
           export BUILDOZER_WARN_ON_ROOT=0
           
-          # Create the p4a directory structure BEFORE buildozer clones it
           P4A_DIR="$HOME/.buildozer/android/platform/python-for-android"
           mkdir -p $(dirname $P4A_DIR)
           
           if [ ! -d "$P4A_DIR/.git" ]; then
-            echo "Cloning p4a (no git history for speed)..."
+            echo "Cloning p4a..."
             git clone --depth=1 --branch=master https://github.com/kivy/python-for-android.git "$P4A_DIR" 2>&1 | tail -3
           fi
           
-          echo "=== Found p4a version ==="
-          cd "$P4A_DIR" && git describe --tags 2>/dev/null || git rev-parse --short HEAD 2>/dev/null
-          
-          # Patch p4a NDK version: change 27.3.13750724 -> 28c in ALL .py files
           echo "=== Patching p4a NDK version ==="
-          FIND_RESULT=$(find "$P4A_DIR" -name "*.py" -exec grep -l "27\.3\.13750724" {} \; 2>/dev/null | head -10)
-          echo "Files with 27.3.13750724: $FIND_RESULT"
-          find "$P4A_DIR" -name "*.py" -exec sed -i 's|27\.3\.13750724|28c|g' {} \; 2>/dev/null || true
-          echo "Patched $(find "$P4A_DIR" -name "*.py" -exec grep -l "28c" {} \; 2>/dev/null | wc -l) files"
+          find "$P4A_DIR" -name "*.py" -exec sed -i 's|27\.3\.13750724|28c|g' {} \;
+          echo "p4a patched"
           
-          # Also patch buildozer android.py
-          BUILDOZER_PY=$(find /opt/hostedtoolcache /usr/local -name "android.py" -path "*/buildozer/targets/*" 2>/dev/null | head -1)
-          if [ -f "$BUILDOZER_PY" ]; then
-            echo "Patching buildozer: $BUILDOZER_PY"
-            sed -i 's|27\.3\.13750724|28c|g' "$BUILDOZER_PY"
+          # Patch buildozer android.py - find it properly
+          echo "=== Finding and patching buildozer android.py ==="
+          PIP_LOC=$(pip show buildozer 2>/dev/null | grep "^Location:" | awk '{print $2}')
+          echo "pip Location: $PIP_LOC"
+          BUILDOZER_ANDROID="$PIP_LOC/buildozer/targets/android.py"
+          echo "Looking for: $BUILDOZER_ANDROID"
+          if [ -f "$BUILDOZER_ANDROID" ]; then
+            echo "Found! Patching..."
+            sed -i 's|27\.3\.13750724|28c|g' "$BUILDOZER_ANDROID"
+            echo "Patched: $(grep -c "28c" "$BUILDOZER_ANDROID") occurrences"
+          else
+            echo "NOT FOUND - searching..."
+            find /opt /usr /home -name "android.py" -path "*/buildozer/targets/*" 2>/dev/null | head -5
           fi
           
-          # Clear cache
-          find /opt/hostedtoolcache -name "__pycache__" -type d 2>/dev/null | xargs rm -rf 2>/dev/null || true
-          find /opt/hostedtoolcache -name "*.pyc" -delete 2>/dev/null || true
-          echo "=== Pre-clone and patch complete ==="
+          echo "=== Clearing Python cache ==="
+          find "$PIP_LOC" -name "__pycache__" -type d 2>/dev/null | head -3 | xargs rm -rf 2>/dev/null || true
+          find "$PIP_LOC" -name "*.pyc" -delete 2>/dev/null || true
 
-      - name: Build APK (with pre-patched p4a)
+      - name: Build APK
         env:
           JAVA_HOME: ${{ env.JAVA_HOME }}
           BUILDOZER_WARN_ON_ROOT: '0'
@@ -135,8 +136,6 @@ jobs:
 
           echo "=== NDK ==="
           cat $ANDROID_NDK_HOME/source.properties
-          echo "=== p4a patched check ==="
-          grep -r "28c" $HOME/.buildozer/android/platform/python-for-android/pythonforandroid/*.py 2>/dev/null | grep -v ".pyc" | head -5 || echo "p4a check done"
 
           set -o pipefail
           buildozer android debug 2>&1 | tee build.log
