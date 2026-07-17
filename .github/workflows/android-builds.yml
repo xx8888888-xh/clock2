@@ -1,4 +1,4 @@
-name: Android APK Build (v14 - fix YAML heredoc issue)
+name: Android APK Build (v15 - precise URL patch)
 
 on:
   push:
@@ -41,7 +41,7 @@ jobs:
           $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_DIR \
             "platform-tools" "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -3
 
-      - name: Download NDK r28c and install with correct source.properties
+      - name: Download NDK r28c into buildozer cache at exact path
         run: |
           export JAVA_HOME=$JAVA_HOME
           SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
@@ -57,7 +57,6 @@ jobs:
           mkdir -p $SDK_DIR/ndk
           rm -rf $SDK_DIR/ndk/27.3.13750724
           ln -sfn $BUILDOZER_NDK $SDK_DIR/ndk/27.3.13750724
-          echo "=== Patching source.properties ==="
           printf 'Pkg.Desc = Android NDK\nPkg.Revision = 27.3.13750724\nPkg.BaseRevision = 28.2.13676358\nPkg.ReleaseName = r28c\n' > $BUILDOZER_NDK/source.properties
           cat $BUILDOZER_NDK/source.properties
 
@@ -83,18 +82,27 @@ jobs:
             grep "^ndk_" buildozer.spec || true
           fi
 
-      - name: Patch buildozer android.py to use NDK without re-download
+      - name: Patch buildozer android.py to fix NDK download URL
         run: |
           PIP_LOC=$(pip show buildozer 2>/dev/null | grep "^Location:" | awk '{print $2}')
           BUILDOZER_ANDROID="$PIP_LOC/buildozer/targets/android.py"
-          echo "Patching: $BUILDOZER_ANDROID"
+          echo "Target: $BUILDOZER_ANDROID"
           if [ -f "$BUILDOZER_ANDROID" ]; then
-            sed -i 's|"27\.3\.13750724"|"28c"|g' "$BUILDOZER_ANDROID"
-            echo "Patched"
-            grep -n "27\.3\.13750724\|28c" "$BUILDOZER_ANDROID" | head -5
+            echo "Before patch, checking lines with 'r27.3':"
+            grep -n "r27.3" "$BUILDOZER_ANDROID" | head -5
+            echo "Patching URL..."
+            sed -i 's|android-ndk-r27\.3\.13750724-linux\.zip|android-ndk-r28c-linux.zip|g' "$BUILDOZER_ANDROID"
+            sed -i 's|android-ndk-r27\.3\.13750724-windows\.zip|android-ndk-r28c-windows.zip|g' "$BUILDOZER_ANDROID"
+            sed -i 's|android-ndk-r27\.3\.13750724-darwin|android-ndk-r28c-darwin|g' "$BUILDOZER_ANDROID"
+            echo "After patch:"
+            grep -n "android-ndk-r" "$BUILDOZER_ANDROID" | head -5
+          else
+            echo "ERROR: file not found"
+            exit 1
           fi
           find "$PIP_LOC" -name "__pycache__" -type d 2>/dev/null | xargs rm -rf 2>/dev/null || true
           find "$PIP_LOC" -name "*.pyc" -delete 2>/dev/null || true
+          echo "Done"
 
       - name: Build APK
         env:
