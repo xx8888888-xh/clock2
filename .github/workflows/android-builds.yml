@@ -1,4 +1,4 @@
-name: Android APK Build (v7 - fix grep exit code)
+name: Android APK Build (v8 - reliable NDK patch)
 
 on:
   push:
@@ -41,7 +41,7 @@ jobs:
           $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_DIR \
             "platform-tools" "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -3
 
-      - name: Download NDK r28c
+      - name: Download NDK r28c into buildozer cache
         run: |
           export JAVA_HOME=$JAVA_HOME
           SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
@@ -54,7 +54,6 @@ jobs:
           mkdir -p $(dirname $BUILDOZER_NDK)
           rm -rf "$BUILDOZER_NDK"
           cp -a /tmp/android-ndk-r28c/. $BUILDOZER_NDK/
-          ln -sfn $BUILDOZER_NDK $SDK_DIR/ndk/r28c 2>/dev/null || true
           echo "=== NDK installed ==="
           cat $BUILDOZER_NDK/source.properties
 
@@ -69,27 +68,49 @@ jobs:
           if [ -f buildozer_android.spec ]; then
             cp buildozer_android.spec buildozer.spec
           elif [ -f buildozer.spec ]; then
-            cp buildozer.spec buildozer.spec
+            echo "Using existing buildozer.spec"
           else
-            echo "No spec file found in repo root"
+            echo "No spec file found"
           fi
           if [ -f buildozer.spec ]; then
             if ! grep -q "^ndk_dir" buildozer.spec; then
               echo "ndk_dir = $HOME/.buildozer/android/platform/android-ndk-27.3.13750724" >> buildozer.spec
             fi
-            echo "=== ndk_dir configured ==="
+            echo "ndk_dir configured:"
             grep "^ndk_dir" buildozer.spec || true
           fi
 
-      - name: Patch buildozer NDK URL (fix 404)
+      - name: Patch buildozer NDK URL (fix non-existent URL)
         run: |
-          TARGET_PY=$(python3 -c "import buildozer; print(buildozer.__file__)" 2>/dev/null)/targets/android.py
-          if [ -f "$TARGET_PY" ]; then
-            echo "Patching: $TARGET_PY"
-            sed -i 's|android-ndk-r27\.3\.13750724-linux\.zip|android-ndk-r28c-linux.zip|g' "$TARGET_PY"
-            echo "=== Patched lines ==="
-            grep "android-ndk-r" "$TARGET_PY" | grep -v ".pyc" | head -5
-          fi
+          export JAVA_HOME=$JAVA_HOME
+          echo "=== Locating buildozer ==="
+          PIP=$(which pip)
+          PYTHON_PKG=$(dirname $(dirname $PIP))/lib/python*/site-packages
+          echo "PIP: $PIP"
+          echo "PYTHON_PKG glob: $PYTHON_PKG"
+          
+          for SITE_DIR in $(python3 -c "import site; print('\n'.join(site.getsitepackages() + [site.getusersitepackages()]))" 2>/dev/null); do
+            for pyfile in $(find "$SITE_DIR" -name "android.py" -path "*/buildozer/targets/*" 2>/dev/null | head -5); do
+              echo "Found buildozer android.py: $pyfile"
+              if grep -q "android-ndk-r27.3.13750724" "$pyfile"; then
+                echo "Patching: $pyfile"
+                sed -i 's|android-ndk-r27\.3\.13750724-linux\.zip|android-ndk-r28c-linux.zip|g' "$pyfile"
+                sed -i 's|android-ndk-r27\.3\.13750724[^/"]*|android-ndk-r28c|g' "$pyfile"
+                echo "Patched. Verifying:"
+                grep "android-ndk-r" "$pyfile" | head -5
+              else
+                echo "Already patched or not matching:"
+                grep "android-ndk-r" "$pyfile" | head -5
+              fi
+            done
+          done
+
+          echo "=== Clearing .pyc cache ==="
+          for SITE_DIR in $(python3 -c "import site; print('\n'.join(site.getsitepackages() + [site.getusersitepackages()]))" 2>/dev/null); do
+            find "$SITE_DIR" -name "__pycache__" -type d 2>/dev/null | xargs rm -rf 2>/dev/null || true
+            find "$SITE_DIR" -name "*.pyc" -delete 2>/dev/null || true
+          done
+          echo "Cache cleared"
 
       - name: Build APK
         env:
@@ -113,7 +134,7 @@ jobs:
           if [ "$BUILDOZER_EXIT" -ne 0 ] || ! ls bin/*.apk 2>/dev/null; then
             echo "=== Errors ==="
             grep -n "Error\|404\|not found\|failed\|Failed\|ERROR\|recipe\|Command failed" build.log | \
-              grep -v "^2026\|\.py.*Error\|log_level\|DEBUG\|colorama\|jinja2\|appdirs" | tail -20
+              grep -v "^2026\|\.py.*Error\|log_level\|DEBUG\|colorama\|jinja2\|appdirs\|sh>=2" | tail -20
             exit 1
           fi
           echo "=== APK built ==="
