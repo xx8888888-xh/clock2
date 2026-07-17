@@ -1,4 +1,4 @@
-name: Android APK Build (v8 - reliable NDK patch)
+name: Android APK Build (v9 - patch NDK version variable)
 
 on:
   push:
@@ -41,10 +41,9 @@ jobs:
           $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_DIR \
             "platform-tools" "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -3
 
-      - name: Download NDK r28c into buildozer cache
+      - name: Download NDK r28c
         run: |
           export JAVA_HOME=$JAVA_HOME
-          SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
           if [ ! -d "/tmp/android-ndk-r28c" ]; then
             echo "Downloading NDK r28c..."
             cd /tmp && curl -sL "https://dl.google.com/android/repository/android-ndk-r28c-linux.zip" -o ndk.zip
@@ -63,7 +62,7 @@ jobs:
           pip install cython==0.29.36
           pip install buildozer
 
-      - name: Configure build (ensure ndk_dir set)
+      - name: Configure build
         run: |
           if [ -f buildozer_android.spec ]; then
             cp buildozer_android.spec buildozer.spec
@@ -80,37 +79,43 @@ jobs:
             grep "^ndk_dir" buildozer.spec || true
           fi
 
-      - name: Patch buildozer NDK URL (fix non-existent URL)
+      - name: Patch buildozer NDK version to r28c (fix 404)
         run: |
           export JAVA_HOME=$JAVA_HOME
-          echo "=== Locating buildozer ==="
-          PIP=$(which pip)
-          PYTHON_PKG=$(dirname $(dirname $PIP))/lib/python*/site-packages
-          echo "PIP: $PIP"
-          echo "PYTHON_PKG glob: $PYTHON_PKG"
+          echo "=== Locating and patching buildozer android.py ==="
           
-          for SITE_DIR in $(python3 -c "import site; print('\n'.join(site.getsitepackages() + [site.getusersitepackages()]))" 2>/dev/null); do
-            for pyfile in $(find "$SITE_DIR" -name "android.py" -path "*/buildozer/targets/*" 2>/dev/null | head -5); do
-              echo "Found buildozer android.py: $pyfile"
-              if grep -q "android-ndk-r27.3.13750724" "$pyfile"; then
-                echo "Patching: $pyfile"
-                sed -i 's|android-ndk-r27\.3\.13750724-linux\.zip|android-ndk-r28c-linux.zip|g' "$pyfile"
-                sed -i 's|android-ndk-r27\.3\.13750724[^/"]*|android-ndk-r28c|g' "$pyfile"
-                echo "Patched. Verifying:"
-                grep "android-ndk-r" "$pyfile" | head -5
-              else
-                echo "Already patched or not matching:"
-                grep "android-ndk-r" "$pyfile" | head -5
-              fi
-            done
+          # Find buildozer android.py
+          BUILDOZER_PY=$(find /opt/hostedtoolcache /usr/local -name "android.py" -path "*/buildozer/targets/*" 2>/dev/null | head -1)
+          if [ -z "$BUILDOZER_PY" ]; then
+            # Try pip user dir
+            BUILDOZER_PY=$(python3 -c "import buildozer; import os; print(os.path.join(os.path.dirname(buildozer.__file__), 'targets', 'android.py'))" 2>/dev/null)
+          fi
+          echo "Found: $BUILDOZER_PY"
+          
+          if [ -f "$BUILDOZER_PY" ]; then
+            echo "=== Before patch (default_ndk_version) ==="
+            grep -n "default_ndk_version\|27.3.13750724\|android_ndk_version" "$BUILDOZER_PY" | head -10
+            
+            # Patch: replace the default NDK version from 27.3.13750724 to r28c
+            # The NDK version string in buildozer is stored as the string "27.3.13750724"
+            # We need to change it to "28c" (or "r28c")
+            sed -i 's|default_ndk_version\s*=\s*"27\.3\.13750724"|default_ndk_version = "r28c"|g' "$BUILDOZER_PY"
+            sed -i 's|27\.3\.13750724|28c|g' "$BUILDOZER_PY"
+            
+            echo "=== After patch ==="
+            grep -n "default_ndk_version\|android_ndk_version" "$BUILDOZER_PY" | head -10
+          fi
+          
+          # Also patch python-forandroid if installed
+          for p4a in $(find /opt/hostedtoolcache /usr/local /home/runner -name "android.py" -path "*/pythonforandroid/*" 2>/dev/null | head -5); do
+            echo "Patching p4a: $p4a"
+            sed -i 's|27\.3\.13750724|28c|g' "$p4a"
           done
-
-          echo "=== Clearing .pyc cache ==="
-          for SITE_DIR in $(python3 -c "import site; print('\n'.join(site.getsitepackages() + [site.getusersitepackages()]))" 2>/dev/null); do
-            find "$SITE_DIR" -name "__pycache__" -type d 2>/dev/null | xargs rm -rf 2>/dev/null || true
-            find "$SITE_DIR" -name "*.pyc" -delete 2>/dev/null || true
-          done
-          echo "Cache cleared"
+          
+          echo "=== Clearing Python cache ==="
+          find /opt/hostedtoolcache -name "__pycache__" -type d 2>/dev/null | head -5 | xargs rm -rf 2>/dev/null || true
+          find /opt/hostedtoolcache -name "*.pyc" -delete 2>/dev/null || true
+          echo "Done"
 
       - name: Build APK
         env:
