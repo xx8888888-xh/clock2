@@ -1,4 +1,4 @@
-name: Android APK Build (v3 - pre-cache NDK)
+name: Android APK Build (v4 - fix NDK path)
 
 on:
   push:
@@ -27,61 +27,57 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Download Android SDK command-line tools
+      - name: Download and install SDK
         run: |
-          mkdir -p $HOME/.buildozer/android/platform/android-sdk/cmdline-tools
-          if [ ! -f "$HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager" ]; then
+          SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
+          mkdir -p $SDK_DIR
+          
+          if [ ! -f "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" ]; then
             cd /tmp
             curl -sL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o cmdline.zip
             unzip -q cmdline.zip
-            mv cmdline-tools $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest
+            mkdir -p $SDK_DIR/cmdline-tools
+            mv cmdline-tools $SDK_DIR/cmdline-tools/latest
             rm cmdline.zip
           fi
-          echo "=== SDK cmdline-tools ready ==="
+          
+          export JAVA_HOME=$JAVA_HOME
+          yes | $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_DIR --licenses 2>/dev/null || true
+          $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_DIR \
+            "platform-tools" "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -3
 
-      - name: Accept SDK licenses and install platform
+      - name: Download NDK r28c into buildozer cache (correct path)
         run: |
           export JAVA_HOME=$JAVA_HOME
-          SDK=$HOME/.buildozer/android/platform/android-sdk
-          yes | $SDK/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK --licenses 2>/dev/null || true
-          $SDK/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK \
-            "platform-tools" "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -5
-
-      - name: Download NDK r28c and cache for buildozer
-        run: |
-          export JAVA_HOME=$JAVA_HOME
-          SDK=$HOME/.buildozer/android/platform/android-sdk
+          SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
           
-          # Download NDK r28c to a temp location
-          NDK_VERSION="28c"
-          NDK_DIR="/tmp/android-ndk-r${NDK_VERSION}"
-          
-          if [ ! -d "$NDK_DIR" ]; then
-            echo "Downloading Android NDK r${NDK_VERSION}..."
+          # Download NDK r28c
+          if [ ! -d "/tmp/android-ndk-r28c" ]; then
+            echo "Downloading NDK r28c..."
             cd /tmp
-            curl -sL "https://dl.google.com/android/repository/android-ndk-r${NDK_VERSION}-linux.zip" -o ndk.zip
+            curl -sL "https://dl.google.com/android/repository/android-ndk-r28c-linux.zip" -o ndk.zip
             unzip -q ndk.zip
-            NDK_DIR="/tmp/android-ndk-r${NDK_VERSION}"
+            echo "NDK downloaded"
           fi
           
-          echo "NDK downloaded to: $NDK_DIR"
-          ls $NDK_DIR/
+          # buildozer looks for NDK at: ~/.buildozer/android/platform/android-ndk-<version>/
+          # p4a default NDK version is 27c (27.3.xxxx series) — we put r28c there
+          BUILDOZER_NDK="$HOME/.buildozer/android/platform/android-ndk-27.3.13750724"
+          mkdir -p $(dirname $BUILDOZER_NDK)
           
-          # Create the NDK location that buildozer expects
-          # buildozer looks for: ~/.buildozer/android/platform/android-ndk-<version>/
-          # The NDK version p4a defaults to is r27c (the 27.3.xxx series)
-          EXPECTED_NDK_PATH="$HOME/.buildozer/android/platform/android-ndk-27.3.13750724"
-          mkdir -p $(dirname $EXPECTED_NDK_PATH)
+          # Remove any existing wrong path
+          rm -rf "$BUILDOZER_NDK"
           
-          # Copy NDK to buildozer cache location
-          echo "Caching NDK to: $EXPECTED_NDK_PATH"
-          cp -r $NDK_DIR $EXPECTED_NDK_PATH
+          # Copy contents of extracted NDK (NOT the containing folder)
+          cp -a /tmp/android-ndk-r28c/. $BUILDOZER_NDK/
           
-          # Also symlink in the SDK's ndk directory
-          mkdir -p $SDK/ndk
-          ln -sfn $EXPECTED_NDK_PATH $SDK/ndk/r28c 2>/dev/null || true
+          echo "=== Verifying NDK structure ==="
+          echo "Expected contents of $BUILDOZER_NDK:"
+          ls $BUILDOZER_NDK/
+          echo "--- source.properties ---"
+          cat $BUILDOZER_NDK/source.properties 2>/dev/null || echo "Not found"
           
-          echo "=== NDK cache populated ==="
+          echo "=== SDK dir structure ==="
           ls $HOME/.buildozer/android/platform/
 
       - name: Install Python dependencies
@@ -93,15 +89,11 @@ jobs:
       - name: Configure build
         run: |
           cp buildozer_android.spec buildozer.spec 2>/dev/null || true
-          echo "=== Project files ==="
           ls -lh
-          echo "=== buildozer.spec key lines ==="
-          grep -E "^#.*ndk|ndk |android_api|minapi|requirements" buildozer.spec 2>/dev/null | grep -v "^#" | head -10
 
       - name: Build APK
         env:
           JAVA_HOME: ${{ env.JAVA_HOME }}
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
           BUILDOZER_WARN_ON_ROOT: '0'
         run: |
           export JAVA_HOME=$JAVA_HOME
@@ -111,24 +103,22 @@ jobs:
           export ANDROID_NDK_ROOT=$HOME/.buildozer/android/platform/android-ndk-27.3.13750724
           export BUILDOZER_WARN_ON_ROOT=0
           
-          echo "=== Build environment ==="
+          echo "=== Env ==="
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
-          echo "NDK contents:"
-          ls $ANDROID_NDK_HOME/ | head -5
-          
-          echo "=== buildozer cache ==="
-          ls $HOME/.buildozer/android/platform/
+          echo "NDK root check:"
+          ls $ANDROID_NDK_HOME/
+          echo "NDK build dir:"
+          ls $ANDROID_NDK_HOME/build/ 2>/dev/null | head -5
           
           set -o pipefail
           buildozer android debug 2>&1 | tee build.log
           BUILDOZER_EXIT=$?
-          echo "BUILDOZER_EXIT=$BUILDOZER_EXIT"
           
           if [ "$BUILDOZER_EXIT" -ne 0 ] || ! ls bin/*.apk 2>/dev/null; then
-            echo "=== Build errors ==="
-            grep -n "Error\|404\|not found\|failed\|Failed\|ERROR\|recipe\|Command failed\|No module" build.log | \
-              grep -v "^2026\|\.py.*Error\|log_level\|DEBUG\|colorama\|jinja2\|appdirs\|sh>=2" | tail -20
+            echo "=== Errors ==="
+            grep -n "Error\|404\|not found\|failed\|Failed\|ERROR\|recipe\|Command failed" build.log | \
+              grep -v "^2026\|\.py.*Error\|log_level\|DEBUG\|colorama\|jinja2\|appdirs" | tail -20
             exit 1
           fi
           echo "=== APK built ==="
@@ -137,8 +127,7 @@ jobs:
       - name: Show build log tail
         if: always()
         run: |
-          echo "=== Last 80 lines ==="
-          tail -80 build.log 2>/dev/null || echo "No log"
+          tail -60 build.log 2>/dev/null || echo "No log"
 
       - name: Upload APK
         if: success()
@@ -152,7 +141,4 @@ jobs:
         if: success()
         run: |
           APK=$(ls bin/*.apk 2>/dev/null | head -1)
-          if [ -n "$APK" ]; then
-            SIZE=$(stat -c%s "$APK")
-            echo "APK: $APK ($((SIZE/1048576)) MB)"
-          fi
+          [ -n "$APK" ] && echo "APK: $APK ($(( $(stat -c%s "$APK") / 1048576 )) MB)"
