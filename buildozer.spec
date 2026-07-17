@@ -4,7 +4,7 @@ package.name = petalarm
 package.domain = org.petalarm
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json,ttf,wav,mp3
-source.main = simplest_main.py  # 先用最简单的架构测试
+source.main = simplest_main.py
 version = 3.0.0
 requirements = python3,kivy==2.3.0,plyer,pillow,cython
 icon.filename = icon.png
@@ -23,7 +23,7 @@ android.api = 33
 android.minapi = 21
 android.target_api = 33
 android.sdk = 34
-android.ndk = 25b
+android.ndk = 27
 android.ndk_api = 21
 android.archs = armeabi-v7a, arm64-v8a
 
