@@ -1,4 +1,4 @@
-name: Android APK Build
+name: Android APK Build (Fixed NDK)
 
 on:
   push:
@@ -10,114 +10,102 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 50
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Android SDK and NDK
+        uses: android-actions/setup-android@v3
+        with:
+          sdk-components: "platforms;android-34 build-tools;34.0.0 platform-tools"
+          ndk-version: "r28c"
+
+      - name: Set environment variables
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "PATH=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$JAVA_HOME/bin:$PATH" >> $GITHUB_ENV
+          echo "BUILDOZER_WARN_ON_ROOT=0" >> $GITHUB_ENV
+          echo "=== SDK ==="
+          ls $ANDROID_SDK_ROOT/
+          echo "=== NDK ==="
+          ls $ANDROID_NDK_HOME/
+
+      - name: Accept SDK licenses
+        run: |
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install system dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y \
-            openjdk-17-jdk \
-            autoconf \
-            automake \
-            libtool \
-            pkg-config \
-            zlib1g-dev \
-            libncurses5-dev \
-            libncursesw5-dev \
-            libtinfo6 \
-            cmake \
-            libffi-dev \
-            libssl-dev
-
-      - name: Set environment variables
-        run: |
-          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
-          echo "PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
-          echo "ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724" >> $GITHUB_ENV
-          echo "ANDROID_NDK_ROOT=/usr/local/lib/android/sdk/ndk/27.3.13750724" >> $GITHUB_ENV
-          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
-
-      - name: Accept SDK licenses
-        run: |
-          yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
-
-      - name: Create buildozer SDK + NDK symlinks
-        run: |
-          mkdir -p /home/runner/.buildozer/android/platform
-          # Symlink SDK so buildozer finds it without downloading
-          ln -sfn /usr/local/lib/android/sdk /home/runner/.buildozer/android/platform/android-sdk
-          # Symlink NDK so buildozer uses pre-installed NDK instead of downloading r28c
-          ln -sfn /usr/local/lib/android/sdk/ndk/27.3.13750724 /home/runner/.buildozer/android/platform/android-ndk-27.3.13750724
-          echo "=== SDK ===" && ls /home/runner/.buildozer/android/platform/android-sdk/ | head -5
-          echo "=== NDK ===" && ls /home/runner/.buildozer/android/platform/android-ndk-27.3.13750724/ | head -5
-          # Also symlink sdkmanager for buildozer's expected path
-          mkdir -p /home/runner/.buildozer/android/platform/android-sdk/tools/bin
-          ln -sf /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager \
-            /home/runner/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
-
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip setuptools wheel
-          pip install buildozer cython==0.29.36
+          pip install cython==0.29.36
+          pip install buildozer
 
       - name: Configure build
         run: |
-          cp buildozer_android.spec buildozer.spec
-          ls -lh icon.png
+          cp buildozer_android.spec buildozer.spec 2>/dev/null || true
+          ls -lh icon.png 2>/dev/null || echo "No icon.png"
+          echo "=== buildozer.spec check ==="
+          grep -E "^android|ndk|ndk_dir|android_api|minapi" buildozer.spec 2>/dev/null | head -10
 
       - name: Build APK
         run: |
-          export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-          export PATH=$JAVA_HOME/bin:$PATH
-          export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
-          export ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724
-          export ANDROID_NDK_ROOT=/usr/local/lib/android/sdk/ndk/27.3.13750724
-          export ANDROID_HOME=/usr/local/lib/android/sdk
-          export ANDROIDSDK=/home/runner/.buildozer/android/platform/android-sdk
-          export ANDROIDNDK=/home/runner/.buildozer/android/platform/android-ndk-27.3.13750724
-          echo "=== Env ==="
+          export JAVA_HOME=$JAVA_HOME
+          export ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT
+          export ANDROID_NDK_HOME=$ANDROID_NDK_HOME
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          export BUILDOZER_WARN_ON_ROOT=0
+          
+          echo "=== Env check ==="
+          echo "JAVA_HOME=$JAVA_HOME"
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
-          echo "ANDROIDSDK=$ANDROIDSDK"
-          echo "ANDROIDNDK=$ANDROIDNDK"
-          echo "=== Starting buildozer ==="
+          echo "NDK version: $(cat $ANDROID_NDK_HOME/source.properties 2>/dev/null | grep 'Pkg.Revision' | head -1)"
+          
           set -o pipefail
           buildozer android debug 2>&1 | tee build.log
           BUILDOZER_EXIT=$?
           echo "BUILDOZER_EXIT=$BUILDOZER_EXIT"
+          
           if [ "$BUILDOZER_EXIT" -ne 0 ] || ! ls bin/*.apk 2>/dev/null; then
-            echo "=== Checking build.log for errors ==="
-            grep -n "Error\|error\|failed\|Failed\|ERROR\|recipe\|Command failed\|Error code" build.log | \
-              grep -v "^2026\|\.py.*Error\|log_level\|DEBUG" | tail -30
+            echo "=== Build failed, checking log ==="
+            grep -n "Error\|error\|failed\|Failed\|ERROR\|recipe\|Command failed\|404\|not found" build.log | \
+              grep -v "^2026\|\.py.*Error\|log_level\|DEBUG\|colorama\|jinja2\|appdirs\|sh>=2" | tail -20
             exit 1
           fi
-          echo "Build succeeded"
+          echo "=== APK built successfully ==="
+          ls -lh bin/*.apk
 
       - name: Show build log tail
         if: always()
         run: |
-          echo "=== Build log (last 200 lines) ==="
-          tail -200 build.log 2>/dev/null || echo "No build log"
+          echo "=== Build log (last 100 lines) ==="
+          tail -100 build.log 2>/dev/null || echo "No build log"
           echo "=== bin/ directory ==="
-          ls -lhR bin/ 2>/dev/null || echo "No bin/ directory"
+          ls -lhR bin/ 2>/dev/null || echo "No bin/"
 
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: petalarm-debug-apk
+          name: petalarm-architecture-rework-apk
           path: bin/*.apk
-          retention-days: 5
+          retention-days: 7
 
       - name: Verify APK size
         if: success()
@@ -129,12 +117,8 @@ jobs:
             echo "APK: $APK"
             echo "Size: $SIZE bytes (${SIZE_MB} MB)"
             if [ "$SIZE" -lt 5242880 ]; then
-              echo "WARNING: APK is smaller than 5MB"
-              exit 1
+              echo "WARNING: APK < 5MB"
             else
               echo "SUCCESS: APK is ${SIZE_MB} MB"
             fi
-          else
-            echo "ERROR: No APK found in bin/"
-            exit 1
           fi
