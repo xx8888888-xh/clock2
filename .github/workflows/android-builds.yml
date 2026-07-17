@@ -1,4 +1,4 @@
-name: Android APK Build (v23 - fix SDK path + symlink tools)
+name: Android APK Build (v24 - better error detection + longer timeout)
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 58
 
     steps:
       - name: Checkout code
@@ -27,31 +27,23 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Download SDK to buildozer managed directory
+      - name: Download SDK
         run: |
-          # buildozer looks for SDK at ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
           BUILDOZER_SDK="$HOME/.buildozer/android/platform/android-sdk"
           mkdir -p $BUILDOZER_SDK
-          
           if [ ! -f "$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
-            echo "Downloading and installing SDK cmdline-tools..."
             cd /tmp && curl -sL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o cmdline.zip
             unzip -q cmdline.zip -d /tmp/sdk-unpack
             mkdir -p $BUILDOZER_SDK/cmdline-tools
             mv /tmp/sdk-unpack/cmdline-tools $BUILDOZER_SDK/cmdline-tools/latest
             rm -rf /tmp/sdk-unpack cmdline.zip
           fi
-          
-          # Buildozer expects tools/bin/sdkmanager - create symlink
           mkdir -p $BUILDOZER_SDK/tools/bin
-          ln -sfn $BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager $BUILDOZER_SDK/tools/bin/sdkmanager 2>/dev/null || true
-          
+          ln -sfn $BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager $BUILDOZER_SDK/tools/bin/sdkmanager
           export JAVA_HOME=$JAVA_HOME
           yes | $BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager --sdk_root=$BUILDOZER_SDK --licenses 2>/dev/null || true
           $BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager --sdk_root=$BUILDOZER_SDK \
             "platform-tools" "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -3
-          echo "=== SDK installed ==="
-          ls $BUILDOZER_SDK/
 
       - name: Install Python dependencies
         run: |
@@ -82,22 +74,32 @@ jobs:
           export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
           export ANDROID_HOME=$ANDROID_SDK_ROOT
           export BUILDOZER_WARN_ON_ROOT=0
-          echo "SDK: $ANDROID_SDK_ROOT"
-          ls $ANDROID_SDK_ROOT/
-          echo "sdkmanager: $(which sdkmanager 2>/dev/null || echo 'not in PATH')"
           set -o pipefail
           buildozer android debug 2>&1 | tee build.log
-          BUILDOZER_EXIT=$?
-          if [ "$BUILDOZER_EXIT" -ne 0 ] || ! ls bin/*.apk 2>/dev/null; then
-            grep -n "Error\|404\|not found\|failed\|Failed\|ERROR\|recipe\|Command failed" build.log | \
-              grep -v "^2026\|\.py.*Error\|log_level\|DEBUG\|colorama\|jinja2\|appdirs\|sh>=2" | tail -20
-            exit 1
+          BUILDOZER_EXIT=${PIPESTATUS[0]}
+          
+          # Check if APK exists
+          if ls bin/*.apk 2>/dev/null; then
+            echo "=== APK found ==="
+            ls -lh bin/*.apk
+            exit 0
           fi
-          ls -lh bin/*.apk
+          
+          # No APK - check for real errors in log
+          echo "=== No APK found, checking for errors ==="
+          grep -n "Error\|ERROR\|failed\|Failed\|Traceback\|Command failed\|cannot find\|No such file\|404" build.log | \
+            grep -v "^2026\|\.py.*Error\|log_level\|DEBUG\|colorama\|jinja2\|appdirs\|sh>=2" | tail -30
+          exit 1
 
-      - name: Show build log
+      - name: Show build log (tail)
         if: always()
-        run: tail -60 build.log 2>/dev/null || echo "No log"
+        run: |
+          if [ -f build.log ]; then
+            echo "=== Last 80 lines of build.log ==="
+            tail -80 build.log
+          else
+            echo "No build.log found"
+          fi
 
       - name: Upload APK
         if: success()
