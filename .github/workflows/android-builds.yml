@@ -1,4 +1,4 @@
-name: Android APK Build (v20 - base64 inline Python)
+name: Android APK Build (v21 - fix spec NDK version)
 
 on:
   push:
@@ -41,7 +41,7 @@ jobs:
           $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_DIR \
             "platform-tools" "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -3
 
-      - name: Download NDK r28c into buildozer cache
+      - name: Download NDK r28c into buildozer cache at exact path
         run: |
           export JAVA_HOME=$JAVA_HOME
           SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
@@ -69,7 +69,7 @@ jobs:
           pip install cython==0.29.36
           pip install buildozer
 
-      - name: Configure build
+      - name: Configure build and fix NDK version in spec
         run: |
           if [ -f buildozer_android.spec ]; then
             cp buildozer_android.spec buildozer.spec
@@ -79,19 +79,12 @@ jobs:
             echo "No spec file found"
           fi
           if [ -f buildozer.spec ]; then
-            if ! grep -q "^ndk_dir" buildozer.spec; then
-              echo "ndk_dir = $HOME/.buildozer/android/platform/android-ndk-27.3.13750724" >> buildozer.spec
-            fi
-            grep "^ndk_" buildozer.spec || true
+            echo "=== Before fix ==="
+            grep -n "android.ndk\|ndk_dir\|ndk_version" buildozer.spec || true
+            sed -i 's|android.ndk.*=.*27\.3\.13750724|android.ndk = r28c|' buildozer.spec
+            echo "=== After fix ==="
+            grep -n "android.ndk\|ndk_dir\|ndk_version" buildozer.spec || true
           fi
-
-      - name: Run Python patch script
-        run: |
-          export JAVA_HOME=$JAVA_HOME
-          pip install buildozer > /dev/null 2>&1
-          SCR=$(pip show buildozer 2>/dev/null | grep "^Location:" | awk '{print $2}')/buildozer/targets/android.py
-          echo "Target: $SCR"
-          python3 -c "import os, shutil, subprocess; t='$SCR'; print('Patching: ' + t); d=open(t).read(); n=len([x for x in __import__('re').findall('27.3.13750724', d)]); open(t,'w').write(d.replace('27.3.13750724','r28c')); print('Replaced ' + str(n) + ' occurrences'); [shutil.rmtree(os.path.join(p,'__pycache__'), ignore_errors=True) for p,x,c in os.walk(os.path.dirname(t)) if x==['__pycache__']]; [os.remove(os.path.join(p,f)) for p,x,c in os.walk(os.path.dirname(t)) for f in c if f.endswith('.pyc')]; print('Done')"
 
       - name: Build APK
         env:
