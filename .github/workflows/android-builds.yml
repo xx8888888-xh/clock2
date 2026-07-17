@@ -1,4 +1,4 @@
-name: Android APK Build (v9 - patch NDK version variable)
+name: Android APK Build (v11 - patch cloned p4a)
 
 on:
   push:
@@ -41,7 +41,7 @@ jobs:
           $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_DIR \
             "platform-tools" "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -3
 
-      - name: Download NDK r28c
+      - name: Download NDK r28c into buildozer cache
         run: |
           export JAVA_HOME=$JAVA_HOME
           if [ ! -d "/tmp/android-ndk-r28c" ]; then
@@ -75,49 +75,53 @@ jobs:
             if ! grep -q "^ndk_dir" buildozer.spec; then
               echo "ndk_dir = $HOME/.buildozer/android/platform/android-ndk-27.3.13750724" >> buildozer.spec
             fi
-            echo "ndk_dir configured:"
-            grep "^ndk_dir" buildozer.spec || true
+            if ! grep -q "^ndk_version" buildozer.spec; then
+              echo "ndk_version = r28c" >> buildozer.spec
+            fi
+            grep -E "^ndk_" buildozer.spec || true
           fi
 
-      - name: Patch buildozer NDK version to r28c (fix 404)
+      - name: Pre-clone and patch python-for-android (the version buildozer actually uses)
         run: |
           export JAVA_HOME=$JAVA_HOME
-          echo "=== Locating and patching buildozer android.py ==="
+          export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          export ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-27.3.13750724
+          export ANDROID_NDK_ROOT=$HOME/.buildozer/android/platform/android-ndk-27.3.13750724
+          export BUILDOZER_WARN_ON_ROOT=0
           
-          # Find buildozer android.py
+          # Create the p4a directory structure BEFORE buildozer clones it
+          P4A_DIR="$HOME/.buildozer/android/platform/python-for-android"
+          mkdir -p $(dirname $P4A_DIR)
+          
+          if [ ! -d "$P4A_DIR/.git" ]; then
+            echo "Cloning p4a (no git history for speed)..."
+            git clone --depth=1 --branch=master https://github.com/kivy/python-for-android.git "$P4A_DIR" 2>&1 | tail -3
+          fi
+          
+          echo "=== Found p4a version ==="
+          cd "$P4A_DIR" && git describe --tags 2>/dev/null || git rev-parse --short HEAD 2>/dev/null
+          
+          # Patch p4a NDK version: change 27.3.13750724 -> 28c in ALL .py files
+          echo "=== Patching p4a NDK version ==="
+          FIND_RESULT=$(find "$P4A_DIR" -name "*.py" -exec grep -l "27\.3\.13750724" {} \; 2>/dev/null | head -10)
+          echo "Files with 27.3.13750724: $FIND_RESULT"
+          find "$P4A_DIR" -name "*.py" -exec sed -i 's|27\.3\.13750724|28c|g' {} \; 2>/dev/null || true
+          echo "Patched $(find "$P4A_DIR" -name "*.py" -exec grep -l "28c" {} \; 2>/dev/null | wc -l) files"
+          
+          # Also patch buildozer android.py
           BUILDOZER_PY=$(find /opt/hostedtoolcache /usr/local -name "android.py" -path "*/buildozer/targets/*" 2>/dev/null | head -1)
-          if [ -z "$BUILDOZER_PY" ]; then
-            # Try pip user dir
-            BUILDOZER_PY=$(python3 -c "import buildozer; import os; print(os.path.join(os.path.dirname(buildozer.__file__), 'targets', 'android.py'))" 2>/dev/null)
-          fi
-          echo "Found: $BUILDOZER_PY"
-          
           if [ -f "$BUILDOZER_PY" ]; then
-            echo "=== Before patch (default_ndk_version) ==="
-            grep -n "default_ndk_version\|27.3.13750724\|android_ndk_version" "$BUILDOZER_PY" | head -10
-            
-            # Patch: replace the default NDK version from 27.3.13750724 to r28c
-            # The NDK version string in buildozer is stored as the string "27.3.13750724"
-            # We need to change it to "28c" (or "r28c")
-            sed -i 's|default_ndk_version\s*=\s*"27\.3\.13750724"|default_ndk_version = "r28c"|g' "$BUILDOZER_PY"
+            echo "Patching buildozer: $BUILDOZER_PY"
             sed -i 's|27\.3\.13750724|28c|g' "$BUILDOZER_PY"
-            
-            echo "=== After patch ==="
-            grep -n "default_ndk_version\|android_ndk_version" "$BUILDOZER_PY" | head -10
           fi
           
-          # Also patch python-forandroid if installed
-          for p4a in $(find /opt/hostedtoolcache /usr/local /home/runner -name "android.py" -path "*/pythonforandroid/*" 2>/dev/null | head -5); do
-            echo "Patching p4a: $p4a"
-            sed -i 's|27\.3\.13750724|28c|g' "$p4a"
-          done
-          
-          echo "=== Clearing Python cache ==="
-          find /opt/hostedtoolcache -name "__pycache__" -type d 2>/dev/null | head -5 | xargs rm -rf 2>/dev/null || true
+          # Clear cache
+          find /opt/hostedtoolcache -name "__pycache__" -type d 2>/dev/null | xargs rm -rf 2>/dev/null || true
           find /opt/hostedtoolcache -name "*.pyc" -delete 2>/dev/null || true
-          echo "Done"
+          echo "=== Pre-clone and patch complete ==="
 
-      - name: Build APK
+      - name: Build APK (with pre-patched p4a)
         env:
           JAVA_HOME: ${{ env.JAVA_HOME }}
           BUILDOZER_WARN_ON_ROOT: '0'
@@ -131,6 +135,8 @@ jobs:
 
           echo "=== NDK ==="
           cat $ANDROID_NDK_HOME/source.properties
+          echo "=== p4a patched check ==="
+          grep -r "28c" $HOME/.buildozer/android/platform/python-for-android/pythonforandroid/*.py 2>/dev/null | grep -v ".pyc" | head -5 || echo "p4a check done"
 
           set -o pipefail
           buildozer android debug 2>&1 | tee build.log
