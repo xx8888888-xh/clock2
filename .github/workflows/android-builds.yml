@@ -1,4 +1,4 @@
-name: Android APK Build (v6 - ndk_dir + patch URL)
+name: Android APK Build (v7 - fix grep exit code)
 
 on:
   push:
@@ -31,16 +31,11 @@ jobs:
         run: |
           SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
           mkdir -p $SDK_DIR
-          
           if [ ! -f "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" ]; then
-            cd /tmp
-            curl -sL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o cmdline.zip
-            unzip -q cmdline.zip
-            mkdir -p $SDK_DIR/cmdline-tools
-            mv cmdline-tools $SDK_DIR/cmdline-tools/latest
-            rm cmdline.zip
+            cd /tmp && curl -sL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o cmdline.zip
+            unzip -q cmdline.zip && mkdir -p $SDK_DIR/cmdline-tools
+            mv cmdline-tools $SDK_DIR/cmdline-tools/latest && rm cmdline.zip
           fi
-          
           export JAVA_HOME=$JAVA_HOME
           yes | $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_DIR --licenses 2>/dev/null || true
           $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_DIR \
@@ -50,27 +45,17 @@ jobs:
         run: |
           export JAVA_HOME=$JAVA_HOME
           SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
-          
           if [ ! -d "/tmp/android-ndk-r28c" ]; then
             echo "Downloading NDK r28c..."
-            cd /tmp
-            curl -sL "https://dl.google.com/android/repository/android-ndk-r28c-linux.zip" -o ndk.zip
-            unzip -q ndk.zip
-            echo "NDK downloaded"
+            cd /tmp && curl -sL "https://dl.google.com/android/repository/android-ndk-r28c-linux.zip" -o ndk.zip
+            unzip -q ndk.zip && echo "NDK downloaded"
           fi
-          
-          # Install NDK at the path buildozer will look for
-          # buildozer constructs: platform/android-ndk-<pkgversion>/
           BUILDOZER_NDK="$HOME/.buildozer/android/platform/android-ndk-27.3.13750724"
           mkdir -p $(dirname $BUILDOZER_NDK)
           rm -rf "$BUILDOZER_NDK"
           cp -a /tmp/android-ndk-r28c/. $BUILDOZER_NDK/
-          
-          # Also symlink r28c for explicit reference
           ln -sfn $BUILDOZER_NDK $SDK_DIR/ndk/r28c 2>/dev/null || true
-          
           echo "=== NDK installed ==="
-          ls $BUILDOZER_NDK/
           cat $BUILDOZER_NDK/source.properties
 
       - name: Install Python dependencies
@@ -79,66 +64,37 @@ jobs:
           pip install cython==0.29.36
           pip install buildozer
 
-      - name: Configure build (set ndk_dir in spec)
+      - name: Configure build (ensure ndk_dir set)
         run: |
-          # Check for buildozer spec files
-          for spec in buildozer.spec buildozer_android.spec; do
-            if [ -f "$spec" ]; then
-              echo "Found: $spec"
-              # Set ndk_dir to point to our pre-installed NDK
-              if ! grep -q "^ndk_dir" "$spec"; then
-                echo "ndk_dir = $HOME/.buildozer/android/platform/android-ndk-27.3.13750724" >> "$spec"
-              fi
-              cp "$spec" buildozer.spec
-              break
-            fi
-          done
-          
-          # If no spec file, create a minimal one
-          if [ ! -f buildozer.spec ]; then
-            echo "No spec file found, checking directory..."
-            ls -la
+          if [ -f buildozer_android.spec ]; then
+            cp buildozer_android.spec buildozer.spec
+          elif [ -f buildozer.spec ]; then
+            cp buildozer.spec buildozer.spec
+          else
+            echo "No spec file found in repo root"
           fi
-          
-          echo "=== buildozer.spec ndk settings ==="
-          grep -E "ndk|android_api|minapi|requirements" buildozer.spec 2>/dev/null | grep -v "^#" | head -10
-
-      - name: Patch buildozer NDK URL (fix 404 for r27.3.13750724)
-        run: |
-          BUILDOZER_NDK="$HOME/.buildozer/android/platform/android-ndk-27.3.13750724"
-          
-          # Find buildozer's android.py and patch the NDK URL
-          BUILDOZER_SITE=$(python3 -c "import buildozer; print(buildozer.__file__)" 2>/dev/null)
-          TARGET_PY="$BUILDOZER_SITE/targets/android.py"
-          
-          echo "Patching: $TARGET_PY"
-          
-          # Check current URL
-          grep "android-ndk-r27.3" "$TARGET_PY" | head -3
-          
-          # Patch: replace the wrong NDK version URL with the correct one (r28c)
-          # The URL https://dl.google.com/android/repository/android-ndk-r27.3.13750724-linux.zip does NOT exist
-          # Replace with https://dl.google.com/android/repository/android-ndk-r28c-linux.zip
-          sed -i 's|android-ndk-r27\.3\.13750724-linux\.zip|android-ndk-r28c-linux.zip|g' "$TARGET_PY"
-          sed -i 's|android-ndk-r27\.3\.13750724|android-ndk-r28c|g' "$TARGET_PY"
-          
-          echo "=== Patched URL lines ==="
-          grep "android-ndk-r" "$TARGET_PY" | grep -v ".pyc" | head -5
-          
-          # Also patch python-for-android if present
-          P4A_GLOB=$(python3 -c "import site; print(site.getsitepackages()[0])" 2>/dev/null)/pythonforandroid*
-          for p4a_dir in $P4A_GLOB; do
-            if [ -d "$p4a_dir" ]; then
-              echo "Patching p4a: $p4a_dir"
-              find "$p4a_dir" -name "*.py" -exec sed -i 's|android-ndk-r27\.3\.13750724|android-ndk-r28c|g' {} \; 2>/dev/null || true
+          if [ -f buildozer.spec ]; then
+            if ! grep -q "^ndk_dir" buildozer.spec; then
+              echo "ndk_dir = $HOME/.buildozer/android/platform/android-ndk-27.3.13750724" >> buildozer.spec
             fi
-          done
+            echo "=== ndk_dir configured ==="
+            grep "^ndk_dir" buildozer.spec || true
+          fi
+
+      - name: Patch buildozer NDK URL (fix 404)
+        run: |
+          TARGET_PY=$(python3 -c "import buildozer; print(buildozer.__file__)" 2>/dev/null)/targets/android.py
+          if [ -f "$TARGET_PY" ]; then
+            echo "Patching: $TARGET_PY"
+            sed -i 's|android-ndk-r27\.3\.13750724-linux\.zip|android-ndk-r28c-linux.zip|g' "$TARGET_PY"
+            echo "=== Patched lines ==="
+            grep "android-ndk-r" "$TARGET_PY" | grep -v ".pyc" | head -5
+          fi
 
       - name: Build APK
         env:
           JAVA_HOME: ${{ env.JAVA_HOME }}
           BUILDOZER_WARN_ON_ROOT: '0'
-          P4A_NDK_VERSION: r28c
         run: |
           export JAVA_HOME=$JAVA_HOME
           export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
@@ -146,16 +102,14 @@ jobs:
           export ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-27.3.13750724
           export ANDROID_NDK_ROOT=$HOME/.buildozer/android/platform/android-ndk-27.3.13750724
           export BUILDOZER_WARN_ON_ROOT=0
-          export P4A_NDK_VERSION=r28c
-          
-          echo "=== Build env ==="
-          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+
+          echo "=== NDK ==="
           cat $ANDROID_NDK_HOME/source.properties
-          
+
           set -o pipefail
           buildozer android debug 2>&1 | tee build.log
           BUILDOZER_EXIT=$?
-          
+
           if [ "$BUILDOZER_EXIT" -ne 0 ] || ! ls bin/*.apk 2>/dev/null; then
             echo "=== Errors ==="
             grep -n "Error\|404\|not found\|failed\|Failed\|ERROR\|recipe\|Command failed" build.log | \
