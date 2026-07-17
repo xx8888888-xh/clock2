@@ -1,4 +1,4 @@
-name: Android APK Build (v4 - fix NDK path)
+name: Android APK Build (v5 - patch NDK source.properties)
 
 on:
   push:
@@ -46,7 +46,7 @@ jobs:
           $SDK_DIR/cmdline-tools/latest/bin/sdkmanager --sdk_root=$SDK_DIR \
             "platform-tools" "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -3
 
-      - name: Download NDK r28c into buildozer cache (correct path)
+      - name: Download NDK r28c and patch version for buildozer
         run: |
           export JAVA_HOME=$JAVA_HOME
           SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
@@ -60,25 +60,25 @@ jobs:
             echo "NDK downloaded"
           fi
           
-          # buildozer looks for NDK at: ~/.buildozer/android/platform/android-ndk-<version>/
-          # p4a default NDK version is 27c (27.3.xxxx series) — we put r28c there
+          # Show original source.properties
+          echo "=== Original source.properties ==="
+          cat /tmp/android-ndk-r28c/source.properties
+          
+          # Patch source.properties to match what buildozer/p4a expects
+          # p4a looks for NDK version string in source.properties Pkg.Revision
+          sed -i 's/Pkg.Revision = .*/Pkg.Revision = 27.3.13750724/' /tmp/android-ndk-r28c/source.properties
+          
+          echo "=== Patched source.properties ==="
+          cat /tmp/android-ndk-r28c/source.properties
+          
+          # Copy to buildozer cache at the exact path it looks for
           BUILDOZER_NDK="$HOME/.buildozer/android/platform/android-ndk-27.3.13750724"
           mkdir -p $(dirname $BUILDOZER_NDK)
-          
-          # Remove any existing wrong path
           rm -rf "$BUILDOZER_NDK"
-          
-          # Copy contents of extracted NDK (NOT the containing folder)
           cp -a /tmp/android-ndk-r28c/. $BUILDOZER_NDK/
           
-          echo "=== Verifying NDK structure ==="
-          echo "Expected contents of $BUILDOZER_NDK:"
-          ls $BUILDOZER_NDK/
-          echo "--- source.properties ---"
-          cat $BUILDOZER_NDK/source.properties 2>/dev/null || echo "Not found"
-          
-          echo "=== SDK dir structure ==="
-          ls $HOME/.buildozer/android/platform/
+          echo "=== Verifying patched NDK ==="
+          cat $BUILDOZER_NDK/source.properties
 
       - name: Install Python dependencies
         run: |
@@ -103,13 +103,11 @@ jobs:
           export ANDROID_NDK_ROOT=$HOME/.buildozer/android/platform/android-ndk-27.3.13750724
           export BUILDOZER_WARN_ON_ROOT=0
           
-          echo "=== Env ==="
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
-          echo "NDK root check:"
+          echo "=== NDK source.properties ==="
+          cat $ANDROID_NDK_HOME/source.properties
+          
+          echo "=== NDK tools ==="
           ls $ANDROID_NDK_HOME/
-          echo "NDK build dir:"
-          ls $ANDROID_NDK_HOME/build/ 2>/dev/null | head -5
           
           set -o pipefail
           buildozer android debug 2>&1 | tee build.log
