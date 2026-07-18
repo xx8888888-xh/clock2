@@ -130,8 +130,14 @@ jobs:
           fi
 
       - name: Upload APK
-        if: success() && file bin/*.apk
-        uses: actions/upload-artifact@v4
+        if: success()
+        run: |
+          if ls bin/*.apk 1>/dev/null 2>&1; then
+            echo "APK found, will upload"
+          else
+            echo "No APK found"
+            exit 1
+          fi
         with:
           name: clock2-architecture-rework-apk
           path: bin/*.apk
