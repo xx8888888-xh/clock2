@@ -12,7 +12,7 @@ class WeatherAPI:
     
     def __init__(self, api_key=None):
         self.api_key = api_key or 'demo_key'  # 默认使用免费API
-        self.base_url = "http://api.openweathermap.org/data/2.5/weather"
+        self.base_url = "https://api.openweathermap.org/data/2.5/weather"
         self.last_weather_data = None
         self.has_data = False
         
