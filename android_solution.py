@@ -6,7 +6,10 @@ Android原生悬浮窗解决方案
 实际使用时需要部署到Android设备并通过pyjnius等工具调用。
 """
 
-from jnius import autoclass  # 保留必要的导入
+try:
+    from jnius import autoclass
+except ImportError:
+    autoclass = None  # pyjnius not available on non-Android platforms
 
 def create_android_overlay():
     """
