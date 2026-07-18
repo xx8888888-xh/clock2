@@ -4,7 +4,7 @@ package.name = petalarm
 package.domain = org.petalarm
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json,ttf,wav,mp3
-source.main = simplest_main.py  # 先用最简单的架构测试
+source.main = simplest_main.py
 version = 3.0.0
 requirements = python3,kivy==2.3.0,plyer,pillow,cython
 icon.filename = icon.png
@@ -39,6 +39,9 @@ android.notification_channel = 宠物闹钟,宠物闹钟提醒
 
 # Service配置（Android悬浮窗需要）
 android.manifest_placeholders = [foregroundServiceType: "dataSync"]
+
+# 打包配置 - 关键：release模式避免python_shared链接问题
+android.release = True
 
 # 打包配置
 build.dir = ./.buildozer
