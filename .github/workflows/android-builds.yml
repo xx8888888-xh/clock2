@@ -25,7 +25,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Download and setup Android SDK + NDK r25b
+      - name: Download and setup Android SDK
         run: |
           BUILDOZER_SDK="$HOME/.buildozer/android/platform/android-sdk"
           mkdir -p $BUILDOZER_SDK
@@ -44,7 +44,6 @@ jobs:
 
           yes | $BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager --sdk_root=$BUILDOZER_SDK --licenses 2>/dev/null || true
 
-          echo "=== Installing SDK components ==="
           $BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager --sdk_root=$BUILDOZER_SDK \
             "platform-tools" "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -5
 
@@ -58,11 +57,10 @@ jobs:
             unzip -q ndk.zip
             mv android-ndk-r25b "$NDK_DIR"
             rm ndk.zip
-            echo "=== NDK r25b installed ==="
+            echo "NDK r25b installed"
           else
-            echo "=== NDK r25b already exists ==="
+            echo "NDK r25b already present"
           fi
-          ls -la $NDK_DIR
 
       - name: Install Python dependencies
         run: |
@@ -70,20 +68,17 @@ jobs:
           pip install cython==0.29.36
           pip install buildozer
 
-      - name: Prepare buildozer.spec (use existing spec, NDK r25b)
+      - name: Prepare buildozer.spec
         run: |
           if [ -f buildozer.spec ]; then
-            echo "=== Using existing buildozer.spec ==="
+            echo "Using buildozer.spec"
           elif [ -f buildozer_android.spec ]; then
             cp buildozer_android.spec buildozer.spec
-            echo "=== Copied buildozer_android.spec ==="
           else
             echo "No spec file found"
+            exit 1
           fi
-          if [ -f buildozer.spec ]; then
-            echo "=== Current NDK setting ==="
-            grep "^android.ndk" buildozer.spec || true
-          fi
+          grep "^android.ndk" buildozer.spec || true
 
       - name: Build APK
         env:
@@ -97,47 +92,26 @@ jobs:
           export ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-r25b
           export ANDROID_NDK_ROOT=$HOME/.buildozer/android/platform/android-ndk-r25b
           export BUILDOZER_WARN_ON_ROOT=0
-
-          echo "=== Build info ==="
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
-          ls $ANDROID_NDK_HOME 2>/dev/null || echo "NDK dir not found"
-
           set -o pipefail
           buildozer android debug 2>&1 | tee build.log
-          BUILD_EXIT=${PIPESTATUS[0]}
-
-          echo "=== Build exit code: $BUILD_EXIT ==="
-          if [ -f bin/*.apk ]; then
-            echo "=== APK found ==="
-            ls -lh bin/*.apk
-          else
-            echo "=== Build log tail ==="
-            tail -30 build.log
-          fi
-          exit $BUILD_EXIT
+          exit ${PIPESTATUS[0]}
 
       - name: Verify APK
         run: |
-          APK=$(ls bin/*.apk 2>/dev/null | head -1)
-          if [ -f "$APK" ]; then
-            echo "=== APK Verification ==="
-            SIZE=$(stat -c%s "$APK")
-            echo "APK: $APK"
-            echo "Size: $(( SIZE / 1024 / 1024 )) MB"
+          echo "=== Build log tail ==="
+          tail -20 build.log
+          echo ""
+          echo "=== APK files ==="
+          find . -name "*.apk" 2>/dev/null
+          if [ -f bin/*.apk ]; then
+            APK=$(ls bin/*.apk | head -1)
+            echo "Size: $(du -h $APK | cut -f1)"
             unzip -l "$APK" 2>/dev/null | grep -c "classes.dex" | xargs echo "DEX files:"
-            unzip -l "$APK" 2>/dev/null | grep -c "\.so" | xargs echo "SO files:"
           fi
 
       - name: Upload APK
         if: success()
-        run: |
-          if ls bin/*.apk 1>/dev/null 2>&1; then
-            echo "APK found, will upload"
-          else
-            echo "No APK found"
-            exit 1
-          fi
+        uses: actions/upload-artifact@v4
         with:
           name: clock2-architecture-rework-apk
           path: bin/*.apk
