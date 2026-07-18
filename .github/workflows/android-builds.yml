@@ -1,4 +1,4 @@
-name: Android APK Build (Robust NDK r25b)
+name: Android APK Build (Release Mode + NDK r25b)
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 jobs:
   build-android:
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     steps:
       - name: Checkout code
@@ -77,28 +77,31 @@ jobs:
             echo "Using buildozer.spec"
           elif [ -f buildozer_android.spec ]; then
             cp buildozer_android.spec buildozer.spec
+            echo "Copied buildozer_android.spec to buildozer.spec"
           else
             echo "ERROR: No spec file found"
             ls -la
             exit 1
           fi
-          grep "^android.ndk\|^source.main\|^source.dir" buildozer.spec || true
 
-      - name: Debug environment
-        run: |
-          echo "=== Environment ==="
-          echo "JAVA_HOME=$JAVA_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
-          echo "BUILDZER_SDK=$HOME/.buildozer/android/platform/android-sdk"
-          ls -la $HOME/.buildozer/android/platform/ 2>/dev/null || echo "No buildozer dir yet"
-          which buildozer
-          buildozer --version
+          # Add release_optimize if not present (avoid debug build slowness)
+          if ! grep -q "android.release_optimize" buildozer.spec; then
+            echo "" >> buildozer.spec
+            echo "# Release optimize for faster build" >> buildozer.spec
+            echo "android.release_optimize = 1" >> buildozer.spec
+          fi
 
-      - name: Build APK
+          # Ensure release mode
+          if ! grep -q "android.release" buildozer.spec; then
+            echo "android.release = True" >> buildozer.spec
+          fi
+
+          grep -E "source.main|requirements|android.release|android.archs" buildozer.spec || true
+
+      - name: Build APK (Release)
         env:
-          JAVA_HOME: ${{ env.JAVA_HOME }}
           BUILDOZER_WARN_ON_ROOT: '0'
+          BUILDZER_TIMEOUT: '5400'
         run: |
           export JAVA_HOME=$JAVA_HOME
           export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
@@ -106,29 +109,21 @@ jobs:
           export ANDROID_NDK_ROOT=$HOME/.buildozer/android/platform/android-ndk-r25b
           export ANDROID_HOME=$ANDROID_SDK_ROOT
           export BUILDOZER_WARN_ON_ROOT=0
+          export BUILDZER_TIMEOUT=5400
 
-          echo "=== Build environment ==="
-          env | grep ANDROID
-          echo "==="
-          env | grep JAVA
+          echo "=== Env ==="
+          env | grep -E "ANDROID|JAVA" | head -10
 
-          echo "=== Running buildozer (log_level=2) ==="
-          buildozer android debug --log-level=2 2>&1 | tee build.log
+          echo "=== Building release APK ==="
+          # Use release mode explicitly
+          buildozer android release --log-level=2 2>&1 | tee build.log
           EXIT_CODE=${PIPESTATUS[0]}
 
-          echo "=== Build exit code: $EXIT_CODE ==="
-          echo "=== build.log size: $(wc -c < build.log) bytes ==="
-          echo "=== build.log tail ==="
-          tail -50 build.log
+          echo "=== Exit: $EXIT_CODE ==="
+          tail -20 build.log
 
-          if [ -f bin/*.apk ] && [ -s bin/*.apk ]; then
-            echo "=== APK created ==="
-            ls -lh bin/*.apk
-          else
-            echo "=== No APK found ==="
-            echo "=== Checking .buildozer dir ==="
-            find . -name "*.apk" 2>/dev/null
-          fi
+          # Find APK
+          find . -name "*.apk" -newer buildozer.spec 2>/dev/null | head -5
 
           exit $EXIT_CODE
 
@@ -136,14 +131,16 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: clock2-architecture-rework-apk
-          path: bin/*.apk
+          name: clock2-architecture-rework-apk-release
+          path: |
+            bin/*.apk
+            bin/*.aab
           retention-days: 30
 
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: clock2-architecture-rework-buildlog
+          name: clock2-architecture-rework-buildlog-release
           path: build.log
           retention-days: 7
