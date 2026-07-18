@@ -1,16 +1,14 @@
-name: Android APK Build (v24 - better error detection + longer timeout)
+name: Android APK Build (Fixed - NDK r25b)
 
 on:
   push:
-    branches: [ architecture-rework, main ]
-  pull_request:
-    branches: [ architecture-rework, main ]
+    branches: [ architecture-rework ]
   workflow_dispatch:
 
 jobs:
   build-android:
     runs-on: ubuntu-latest
-    timeout-minutes: 58
+    timeout-minutes: 60
 
     steps:
       - name: Checkout code
@@ -27,23 +25,44 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Download SDK
+      - name: Download and setup Android SDK + NDK r25b
         run: |
           BUILDOZER_SDK="$HOME/.buildozer/android/platform/android-sdk"
           mkdir -p $BUILDOZER_SDK
+
           if [ ! -f "$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
-            cd /tmp && curl -sL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o cmdline.zip
+            cd /tmp
+            curl -sL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o cmdline.zip
             unzip -q cmdline.zip -d /tmp/sdk-unpack
             mkdir -p $BUILDOZER_SDK/cmdline-tools
             mv /tmp/sdk-unpack/cmdline-tools $BUILDOZER_SDK/cmdline-tools/latest
             rm -rf /tmp/sdk-unpack cmdline.zip
           fi
+
           mkdir -p $BUILDOZER_SDK/tools/bin
-          ln -sfn $BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager $BUILDOZER_SDK/tools/bin/sdkmanager
-          export JAVA_HOME=$JAVA_HOME
+          ln -sfn $BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager $BUILDOZER_SDK/tools/bin/sdkmanager 2>/dev/null || true
+
           yes | $BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager --sdk_root=$BUILDOZER_SDK --licenses 2>/dev/null || true
+
+          echo "=== Installing SDK components ==="
           $BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager --sdk_root=$BUILDOZER_SDK \
-            "platform-tools" "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -3
+            "platform-tools" "platforms;android-34" "build-tools;34.0.0" 2>&1 | tail -5
+
+      - name: Download Android NDK r25b
+        run: |
+          NDK_DIR="$HOME/.buildozer/android/platform/android-ndk-r25b"
+          if [ ! -d "$NDK_DIR" ]; then
+            echo "=== Downloading NDK r25b ==="
+            cd /tmp
+            curl -sL "https://dl.google.com/android/repository/android-ndk-r25b-linux.zip" -o ndk.zip
+            unzip -q ndk.zip
+            mv android-ndk-r25b "$NDK_DIR"
+            rm ndk.zip
+            echo "=== NDK r25b installed ==="
+          else
+            echo "=== NDK r25b already exists ==="
+          fi
+          ls -la $NDK_DIR
 
       - name: Install Python dependencies
         run: |
@@ -51,17 +70,18 @@ jobs:
           pip install cython==0.29.36
           pip install buildozer
 
-      - name: Configure build and fix NDK version
+      - name: Prepare buildozer.spec (use existing spec, NDK r25b)
         run: |
-          if [ -f buildozer_android.spec ]; then
+          if [ -f buildozer.spec ]; then
+            echo "=== Using existing buildozer.spec ==="
+          elif [ -f buildozer_android.spec ]; then
             cp buildozer_android.spec buildozer.spec
-          elif [ -f buildozer.spec ]; then
-            echo "Using existing buildozer.spec"
+            echo "=== Copied buildozer_android.spec ==="
           else
             echo "No spec file found"
           fi
           if [ -f buildozer.spec ]; then
-            sed -i 's|android.ndk.*=.*27\.3\.13750724|android.ndk = 28c|' buildozer.spec
+            echo "=== Current NDK setting ==="
             grep "^android.ndk" buildozer.spec || true
           fi
 
@@ -69,48 +89,50 @@ jobs:
         env:
           JAVA_HOME: ${{ env.JAVA_HOME }}
           BUILDOZER_WARN_ON_ROOT: '0'
+          ANDROID_SDK_ROOT: ${{ env.HOME }}/.buildozer/android/platform/android-sdk
+          ANDROID_NDK_HOME: ${{ env.HOME }}/.buildozer/android/platform/android-ndk-r25b
         run: |
           export JAVA_HOME=$JAVA_HOME
           export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
-          export ANDROID_HOME=$ANDROID_SDK_ROOT
+          export ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-r25b
+          export ANDROID_NDK_ROOT=$HOME/.buildozer/android/platform/android-ndk-r25b
           export BUILDOZER_WARN_ON_ROOT=0
+
+          echo "=== Build info ==="
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+          ls $ANDROID_NDK_HOME 2>/dev/null || echo "NDK dir not found"
+
           set -o pipefail
           buildozer android debug 2>&1 | tee build.log
-          BUILDOZER_EXIT=${PIPESTATUS[0]}
-          
-          # Check if APK exists
-          if ls bin/*.apk 2>/dev/null; then
+          BUILD_EXIT=${PIPESTATUS[0]}
+
+          echo "=== Build exit code: $BUILD_EXIT ==="
+          if [ -f bin/*.apk ]; then
             echo "=== APK found ==="
             ls -lh bin/*.apk
-            exit 0
-          fi
-          
-          # No APK - check for real errors in log
-          echo "=== No APK found, checking for errors ==="
-          grep -n "Error\|ERROR\|failed\|Failed\|Traceback\|Command failed\|cannot find\|No such file\|404" build.log | \
-            grep -v "^2026\|\.py.*Error\|log_level\|DEBUG\|colorama\|jinja2\|appdirs\|sh>=2" | tail -30
-          exit 1
-
-      - name: Show build log (tail)
-        if: always()
-        run: |
-          if [ -f build.log ]; then
-            echo "=== Last 80 lines of build.log ==="
-            tail -80 build.log
           else
-            echo "No build.log found"
+            echo "=== Build log tail ==="
+            tail -30 build.log
+          fi
+          exit $BUILD_EXIT
+
+      - name: Verify APK
+        run: |
+          APK=$(ls bin/*.apk 2>/dev/null | head -1)
+          if [ -f "$APK" ]; then
+            echo "=== APK Verification ==="
+            SIZE=$(stat -c%s "$APK")
+            echo "APK: $APK"
+            echo "Size: $(( SIZE / 1024 / 1024 )) MB"
+            unzip -l "$APK" 2>/dev/null | grep -c "classes.dex" | xargs echo "DEX files:"
+            unzip -l "$APK" 2>/dev/null | grep -c "\.so" | xargs echo "SO files:"
           fi
 
       - name: Upload APK
-        if: success()
+        if: success() && file bin/*.apk
         uses: actions/upload-artifact@v4
         with:
-          name: petalarm-architecture-rework-apk
+          name: clock2-architecture-rework-apk
           path: bin/*.apk
-          retention-days: 7
-
-      - name: Verify APK
-        if: success()
-        run: |
-          APK=$(ls bin/*.apk 2>/dev/null | head -1)
-          [ -n "$APK" ] && echo "APK: $APK ($(( $(stat -c%s "$APK") / 1048576 )) MB)"
+          retention-days: 30
