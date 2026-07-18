@@ -1736,65 +1736,40 @@ class DesktopPetAlarmApp(App):
         self.banner_display_time = 5
     
     def build(self):
-        # Android悬浮窗权限检查
         from kivy.utils import platform
         from kivy.uix.widget import Widget
         from kivy.clock import Clock
-        
-        print(f"当前平台: {platform}")
-        
+
         if platform == "android":
-            print("Android平台检测")
             try:
                 from android.permissions import Permission, request_permission
                 from android.permissions import check_permission
-                
-                # 检查悬浮窗权限
+
                 has_permission = check_permission(Permission.SYSTEM_ALERT_WINDOW)
-                print(f"悬浮窗权限状态: {has_permission}")
-                
+
                 if has_permission:
-                    print("已拥有悬浮窗权限，延迟初始化")
-                    # 延迟0.5秒初始化窗口
                     Clock.schedule_once(lambda dt: self.init_app_window(), 0.5)
                 else:
-                    print("没有悬浮窗权限，请求权限")
                     def callback(permissions, results):
-                        print(f"权限请求结果: {results}")
                         if all(results):
-                            print("悬浮窗权限已授予，延迟初始化")
-                            # 延迟1秒初始化窗口
                             Clock.schedule_once(lambda dt: self.init_app_window(), 1)
                         else:
-                            print("悬浮窗权限被拒绝，延迟初始化")
-                            # 权限被拒绝也延迟初始化，可能显示错误
                             Clock.schedule_once(lambda dt: self.init_app_window(), 1)
-                    
-                    # 请求悬浮窗权限
-                    print("正在请求悬浮窗权限...")
+
                     request_permission(Permission.SYSTEM_ALERT_WINDOW, callback)
-                    print("权限请求已发送")
-                
-                # 返回临时Widget避免闪退
+
                 return Widget()
-            except ImportError as e:
-                print(f"Android权限模块导入错误: {e}")
-                print("Android权限模块不可用，延迟初始化")
+            except ImportError:
                 Clock.schedule_once(lambda dt: self.init_app_window(), 0.5)
                 return Widget()
-            except Exception as e:
-                print(f"Android权限检查异常: {e}")
+            except Exception:
                 Clock.schedule_once(lambda dt: self.init_app_window(), 0.5)
                 return Widget()
         else:
-            print("非Android平台，直接初始化")
             return self.init_app_window()
     
     def init_app_window(self):
         """初始化应用窗口"""
-        from kivy.core.window import Window
-        from kivy.uix.floatlayout import FloatLayout
-        
         try:
             Window.borderless = True
             Window.always_on_top = True
@@ -1802,43 +1777,25 @@ class DesktopPetAlarmApp(App):
             Window.size = (dp(200), dp(200))
             Window.left = 100
             Window.top = 500
-            
-            # Android特殊设置
+
             from kivy.utils import platform
             if platform == "android":
                 # 关键修复：Android悬浮窗透明度
                 # Alpha=0.5 → 50%透明，可见但不太突兀
-                Window.clearcolor = (0.95, 0.95, 0.95, 0.5)  # 浅灰色50%透明
-                Window.show()
-                print("Android窗口初始化完成")
-                
-                # 额外设置确保窗口可见
-                Window.top = 300  # 调整为中间位置
-                Window.left = 50   # 调整为中间位置
+                Window.clearcolor = (0.95, 0.95, 0.95, 0.5)
+                Window.top = 300
+                Window.left = 50
                 Window.size = (dp(200), dp(200))
                 Window.always_on_top = True
                 Window.borderless = True
                 Window.resizable = False
-                
-                # 调试信息
-                print(f"窗口位置: ({Window.left}, {Window.top})")
-                print(f"窗口尺寸: {Window.size}")
-                print(f"窗口透明度: {Window.clearcolor}")
-                print(f"窗口总在最前: {Window.always_on_top}")
-                print(f"窗口无边框: {Window.borderless}")
-                
-                # 如果窗口看不见，可以尝试其他透明度
-                print("如果窗口看不见，请在代码中调整透明度:")
-                print("1. Window.clearcolor = (1, 1, 1, 1)  # 白色完全不透明")
-                print("2. Window.clearcolor = (0.5, 0.5, 0.5, 0.8)  # 灰色80%透明")
-                print("3. Window.clearcolor = (1, 0, 0, 0.8)  # 红色80%透明")
-                print("4. Window.clearcolor = (0, 0, 0, 0.8)  # 黑色80%透明")
             else:
-                print("桌面窗口初始化完成")
+                pass
         except Exception as e:
             print(f"窗口初始化失败: {e}")
+            from kivy.uix.widget import Widget
             return Widget()
-        
+
         self.root = FloatLayout()
         
         self.alarm_manager = AlarmClock()
@@ -1857,11 +1814,7 @@ class DesktopPetAlarmApp(App):
         # 添加心情、天气、日历显示标签
         self.add_mood_weather_calendar_labels()
         
-        # 初始化定时更新
-        Clock.schedule_interval(self.update_mood_status, 30)  # 每30秒更新心情
-        Clock.schedule_interval(self.update_weather_status, 1800)  # 每30分钟更新天气
-        Clock.schedule_interval(self.update_calendar_status, 600)  # 每10分钟更新日历
-        
+
 
     
     def load_alarm_sound(self):
@@ -2106,25 +2059,17 @@ class DesktopPetAlarmApp(App):
         try:
             from kivy.utils import platform
             if platform == "android":
-                print("Android应用启动")
-                
-                # 启动Android服务
                 try:
                     from android import AndroidApplication
                     AndroidApplication.start_service()
-                    print("Android前台服务已启动")
-                except ImportError:
-                    print("Android前台服务模块不可用")
-                except Exception as e:
-                    print(f"前台服务启动失败: {e}")
-                
-                # 检查窗口初始化状态
+                except Exception:
+                    pass
+
                 if self.root is None:
-                    print("窗口未初始化，重新初始化")
                     from kivy.clock import Clock
                     Clock.schedule_once(lambda dt: self.init_app_window(), 0.5)
-        except Exception as e:
-            print(f"Android启动异常: {e}")
+        except Exception:
+            pass
         
         # 恢复窗口位置
         try:
@@ -2137,8 +2082,8 @@ class DesktopPetAlarmApp(App):
                     self.pet.pet_size = window_pos.get('pet_size', 160)
                     self.pet.pet_opacity = window_pos.get('pet_opacity', 1.0)
                     self.pet.opacity = self.pet.pet_opacity
-        except Exception as e:
-            print(f"恢复窗口位置失败: {e}")
+        except Exception:
+            pass
 
 
 # ==================== 应用入口 ====================
