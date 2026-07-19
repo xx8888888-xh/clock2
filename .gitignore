@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Buildozer
+.buildozer/
+bin/
+*.apk
+*.aab
+
+# IDE
+.idea/
+.vscode/
+*.swp
