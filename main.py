@@ -43,6 +43,63 @@ from calendar_integration import CalendarIntegration
 # 设置窗口透明背景
 Config.set('graphics', 'background_color', '0,0,0,0')
 
+
+# ==================== 跨平台资源路径辅助函数 ====================
+def get_data_dir():
+    """获取应用数据目录（兼容 Android 和桌面）"""
+    try:
+        app = App.get_running_app()
+        if app:
+            return app.user_data_dir
+    except Exception:
+        pass
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def resource_path(filename, fallback_dir=''):
+    """获取资源文件的跨平台路径
+    
+    优先级：
+    1. 应用数据目录（Android上正确）
+    2. 当前工作目录
+    3. 回退目录
+    """
+    # 先在应用数据目录查找
+    data_dir = get_data_dir()
+    if data_dir:
+        path = os.path.join(data_dir, filename)
+        if os.path.exists(path):
+            return path
+    
+    # 再在当前工作目录查找
+    if os.path.exists(filename):
+        return filename
+    
+    # 再在脚本目录查找
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(script_dir, filename)
+    if os.path.exists(path):
+        return path
+    
+    # 最后在回退目录查找
+    if fallback_dir and os.path.exists(os.path.join(fallback_dir, filename)):
+        return os.path.join(fallback_dir, filename)
+    
+    # 返回原始文件名（让调用方处理不存在的情况）
+    return filename
+
+
+def get_config_path(filename):
+    """获取配置文件的跨平台路径（可写）"""
+    try:
+        app = App.get_running_app()
+        if app:
+            return os.path.join(app.user_data_dir, filename)
+    except Exception:
+        pass
+    return filename  # 回退到当前目录
+
+
 # ==================== 颜色主题 ====================
 CUTE_COLORS = {
     'primary': get_color_from_hex('#FF8FB1'),
@@ -259,9 +316,10 @@ class CutePet(Widget):
     def draw_cute_pet(self):
         image_files = ['pet.png', 'pet_default.png', 'assets/pet.png']
         for img_file in image_files:
-            if os.path.exists(img_file):
+            path = resource_path(img_file)
+            if os.path.exists(path):
                 self.pet_image = Image(
-                    source=img_file,
+                    source=path,
                     size=self.size,
                     pos=self.pos,
                     allow_stretch=True,
@@ -491,18 +549,29 @@ class CutePet(Widget):
         self.last_click_time = current_time
         
         if self.click_count == 1:
-            Clock.schedule_once(lambda dt: self.on_pet_click(), 0.2)
+            # 修复: 捕获 click_count 值避免闭包问题
+            saved_count = self.click_count
+            Clock.schedule_once(lambda dt, cc=saved_count: self._delayed_click(cc), 0.2)
         elif self.click_count == 2:
             self.on_double_click()
         elif self.click_count >= 3:
             self.on_triple_click()
             self.click_count = 0
     
+    def _delayed_click(self, saved_count):
+        """延迟点击处理（使用捕获的值）"""
+        if saved_count == 1:
+            self._on_pet_click()
+    
+    def _on_pet_click(self):
+        """内部点击处理方法"""
+        app = App.get_running_app()
+        if app:
+            app.show_main_menu()
+    
     def on_pet_click(self):
-        if self.click_count == 1:
-            app = App.get_running_app()
-            if app:
-                app.show_main_menu()
+        """保留兼容性的外部方法（已废弃，请使用 _on_pet_click）"""
+        self._on_pet_click()
     
     def on_double_click(self):
         self.excited_animation()
@@ -632,8 +701,9 @@ class AlarmClock:
     
     def load_settings(self):
         try:
-            if os.path.exists('alarm_settings.json'):
-                with open('alarm_settings.json', 'r', encoding='utf-8') as f:
+            config_path = get_config_path('alarm_settings.json')
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
                     return json.load(f)
         except Exception as e:
             print(f"加载设置失败: {e}")
@@ -641,7 +711,8 @@ class AlarmClock:
     
     def save_settings(self):
         try:
-            with open('alarm_settings.json', 'w', encoding='utf-8') as f:
+            config_path = get_config_path('alarm_settings.json')
+            with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(self.settings, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"保存设置失败: {e}")
@@ -854,15 +925,17 @@ class AlarmClock:
     
     def save_alarms(self):
         try:
-            with open('alarms.json', 'w', encoding='utf-8') as f:
+            config_path = get_config_path('alarms.json')
+            with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(self.alarms, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"保存闹钟失败: {e}")
     
     def load_alarms(self):
         try:
-            if os.path.exists('alarms.json'):
-                with open('alarms.json', 'r', encoding='utf-8') as f:
+            config_path = get_config_path('alarms.json')
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
                     self.alarms = json.load(f)
         except Exception as e:
             print(f"加载闹钟失败: {e}")
@@ -1821,8 +1894,9 @@ class DesktopPetAlarmApp(App):
         try:
             sound_files = ['alarm.wav', 'alarm.mp3', 'assets/alarm.wav']
             for sound_file in sound_files:
-                if os.path.exists(sound_file):
-                    self.alarm_sound = SoundLoader.load(sound_file)
+                path = resource_path(sound_file)
+                if os.path.exists(path):
+                    self.alarm_sound = SoundLoader.load(path)
                     break
         except Exception as e:
             print(f"加载声音失败: {e}")
