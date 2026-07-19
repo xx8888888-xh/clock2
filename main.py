@@ -1,5 +1,5 @@
 """
-安卓桌面宠物闹钟 - 完全修复版 V3.0
+安卓桌面宠物闹钟 - 完全修复版 V3.1
 修复所有bug，可直接打包使用
 """
 
@@ -2008,38 +2008,44 @@ class DesktopPetAlarmApp(App):
             print(f"显示通知失败: {e}")
     
     def add_mood_weather_calendar_labels(self):
-        # 添加心情显示标签
+        """添加心情、天气、日历显示标签到悬浮窗内"""
+        # 注意：悬浮窗大小为 200x200dp，位置需要适配
+        # 使用相对于悬浮窗的位置，而非绝对位置
+        label_width = 180
+        label_height = 20
+        
+        # 心情显示标签 - 悬浮窗左下角
         self.mood_label = Label(
             text="心情: 正常 😐",
             size_hint=(None, None),
-            size=(120, 30),
-            pos_hint={'x': 0.85, 'y': 0.95},
+            size=(label_width, label_height),
+            pos_hint={'x': 0.05, 'y': 0.05},
             color=self.pet.mood_system.get_mood_color('normal'),
-            font_size='12sp',
+            font_size='10sp',
             halign='left'
         )
         self.root.add_widget(self.mood_label)
         
-        # 添加天气显示标签
+        # 天气显示标签 - 悬浮窗中下
         self.weather_label = Label(
             text="天气: 晴天 ☀️",
             size_hint=(None, None),
-            size=(120, 30),
-            pos_hint={'x': 0.85, 'y': 0.92},
+            size=(label_width, label_height),
+            pos_hint={'x': 0.05, 'y': 0.15},
             color=CUTE_COLORS['secondary'],
-            font_size='12sp',
+            font_size='10sp',
             halign='left'
         )
         self.root.add_widget(self.weather_label)
         
-        # 添加日历显示标签
+        # 日历显示标签 - 悬浮窗中上
         self.calendar_label = Label(
             text="日历: 无事件",
             size_hint=(None, None),
-            size=(120, 30),
-            pos_hint={'x': 0.85, 'y': 0.89},
+            size=(label_width, label_height),
+            pos_hint={'x': 0.05, 'y': 0.25},
             color=CUTE_COLORS['text'],
-            font_size='12sp',
+            font_size='10sp',
             halign='left'
         )
         self.root.add_widget(self.calendar_label)
