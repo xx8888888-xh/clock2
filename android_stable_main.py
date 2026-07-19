@@ -248,7 +248,6 @@ class SimplePetWidget(Widget):
         if self.x > Window.width - self.size[0]:
             self.x = Window.width - self.size[0]
         if self.y > Window.height - self.size[1]:
-1分钟
             self.y = Window.height - self.size[1]
         
         # 刷新

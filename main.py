@@ -214,7 +214,6 @@ class SimplestPet(Widget):
             Ellipse(
                 pos=(self.x + self.size[0] * 0.25, self.y + self.size[1] * 0.6),
                 size=eye_size
-1分钟
             )
             Ellipse(
                 pos=(self.x + self.size[0] * 0.65, self.y + self.size[1] * 0.6),

@@ -328,7 +328,6 @@ class AlarmClock:
         """添加闹钟"""
         alarm = {
             'hour': hour,
-1分钟
             'minute': minute,
             'label': label,
             'enabled': True
@@ -354,7 +353,7 @@ class AlarmClock:
         
         for alarm in self.alarms:
             if alarm['enabled']:
-                alarm_time = now.replace(hour=alarm['hour'], minute=alarm['1分钟'], second=0, microsecond=0)
+                alarm_time = now.replace(hour=alarm['hour'], minute=alarm['minute'], second=0, microsecond=0)
                 time_diff = abs((now - alarm_time).total_seconds())
                 
                 if time_diff <= 60:
