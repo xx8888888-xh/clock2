@@ -6,7 +6,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json,ttf,wav,mp3
 source.main = main.py
 version = 3.0.0
-requirements = python3==3.11.5,kivy==2.3.0,plyer,pillow,requests
+requirements = python3==3.12,kivy==2.3.0,plyer,pillow,requests
 icon.filename = icon.png
 orientation = portrait
 fullscreen = 0
