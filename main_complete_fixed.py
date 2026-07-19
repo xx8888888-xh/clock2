@@ -48,7 +48,7 @@ if IS_ANDROID:
     try:
         from android.permissions import Permission, request_permissions
         HAS_PERMISSION_MODULE = True
-    except Import222Error:
+    except ImportError:
         HAS_PERMISSION_MODULE = False
 
 # ============== 修复透明度问题 ==============
@@ -182,4 +182,79 @@ class SleepBubble(Widget):
             text='Z',
             font_size=sp(20),
             bold=True,
-12
+            color=CUTE_COLORS['text'],
+            size=self.size,
+            text_size=self.size,
+            halign='center',
+            valign='middle'
+        )
+        self.add_widget(self.label)
+    
+    def update_bubble(self, *args):
+        self.bubble.pos = self.pos
+        self.bubble.size = self.size
+        self.label.size = self.size
+        self.label.text_size = self.size
+    
+    def show_animation(self):
+        if self.current_anim:
+            self.current_anim.cancel(self)
+        
+        self.opacity = 0
+        anim = Animation(opacity=1, duration=0.5, t='out_back')
+        anim.start(self)
+        
+        Clock.schedule_once(lambda dt: self.float_up(), 1.5)
+    
+    def float_up(self):
+        anim = Animation(y=self.y + dp(30), opacity=0, duration=1, t='in_quad')
+        anim.bind(on_complete=lambda *a: self.reset())
+        self.current_anim = anim
+        anim.start(self)
+    
+    def reset(self):
+        self.opacity = 0
+        self.y = self.property('y').get(self)
+
+
+# ==================== 宠物动画部件 ====================
+class PetAnimation(Widget):
+    """宠物动画部件"""
+    
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.current_frame = 0
+        self.frame_count = 4
+        self.anim_speed = 0.15
+        self.is_animating = False
+        self.current_anim = None
+        self.is_sleeping = False
+        
+        self.size_hint = (None, None)
+        self.size = (dp(120), dp(120))
+        
+        with self.canvas:
+            Color(1, 1, 1, 1)
+            self.pet_texture = Rectangle(pos=self.pos, size=self.size)
+        
+        self.bind(pos=self.update_pet, size=self.update_pet)
+        self.schedule_animation()
+    
+    def schedule_animation(self):
+        Clock.schedule_interval(self.next_frame, self.anim_speed)
+    
+    def next_frame(self, dt):
+        if self.is_animating:
+            self.current_frame = (self.current_frame + 1) % self.frame_count
+            self.update_pet()
+    
+    def update_pet(self, *args):
+        self.pet_texture.pos = self.pos
+        self.pet_texture.size = self.size
+    
+    def set_sleeping(self, sleeping):
+        self.is_sleeping = sleeping
+        if sleeping:
+            self.anim_speed = 0.5
+        else:
+            self.anim_speed = 0.15
