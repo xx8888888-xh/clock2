@@ -15,7 +15,7 @@
 ## 技术栈
 
 - **框架**: Kivy 2.3.0
-- **语言**: Python 3.11
+- **语言**: Python 3.12+
 - **平台**: Android
 - **打包**: buildozer + python-for-android
 

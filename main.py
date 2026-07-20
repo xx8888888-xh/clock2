@@ -1001,6 +1001,8 @@ class TimerManager:
         app = App.get_running_app()
         if app:
             app.trigger_timer_alarm(timer)
+        # 计时器触发后从列表移除
+        self.timers = [t for t in self.timers if t['id'] != timer['id']]
     
     def get_active_timers(self):
         return [t for t in self.timers if t['remaining'] > 0]
