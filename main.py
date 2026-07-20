@@ -1,6 +1,6 @@
 """
-安卓桌面宠物闹钟 - 完全修复版 V3.1
-修复所有bug，可直接打包使用
+安卓桌面宠物闹钟 - 完全修复版 V3.2
+修复内存泄漏和定时器清理问题
 """
 
 import os
@@ -304,10 +304,15 @@ class CutePet(Widget):
         self.current_weather = None
         self.next_calendar_event = None
         
+        # 定时器引用（用于 cleanup）
+        self.mood_update_event = None
+        self.weather_update_event = None
+        self.calendar_update_event = None
+        
         # 定时更新心情、天气、日历
-        Clock.schedule_interval(self.update_mood_status, 30)  # 每30秒更新心情
-        Clock.schedule_interval(self.update_weather_status, 1800)  # 每30分钟更新天气
-        Clock.schedule_interval(self.update_calendar_status, 600)  # 每10分钟更新日历
+        self.mood_update_event = Clock.schedule_interval(self.update_mood_status, 30)  # 每30秒更新心情
+        self.weather_update_event = Clock.schedule_interval(self.update_weather_status, 1800)  # 每30分钟更新天气
+        self.calendar_update_event = Clock.schedule_interval(self.update_calendar_status, 600)  # 每10分钟更新日历
         
         self.draw_cute_pet()
         Clock.schedule_once(lambda dt: self.start_cute_idle(), 0.5)
@@ -602,6 +607,16 @@ class CutePet(Widget):
             self.bubble_timer = None
         for bubble in self.sleep_bubbles:
             bubble.cleanup()
+        # 取消定时器以防止内存泄漏
+        if self.mood_update_event:
+            self.mood_update_event.cancel()
+            self.mood_update_event = None
+        if self.weather_update_event:
+            self.weather_update_event.cancel()
+            self.weather_update_event = None
+        if self.calendar_update_event:
+            self.calendar_update_event.cancel()
+            self.calendar_update_event = None
 
     def start_happy_animation(self):
         self.cancel_current_animation()
