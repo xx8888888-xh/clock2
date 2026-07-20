@@ -1,12 +1,11 @@
 # ============================================================
-# Kivy APK 构建 - GitHub Actions 工作流（真正工作的版本）
+# Kivy APK 构建 - GitHub Actions 工作流（sdkmanager修复版）
 #
 # 修复的问题：
-# 1. NDK r25b IN_LIST CMake 兼容性（flags.cmake补丁）
-# 2. Python/Kivy/Cython 版本兼容性
-# 3. 系统依赖完整安装
+# 1. 使用 android-actions/setup-android@v3 替代手动sdkmanager
+# 2. NDK r25b IN_LIST CMake 兼容性（flags.cmake补丁）
+# 3. Python/Kivy/Cython 版本兼容性
 # 4. APK 真实性验证（zipinfo + classes.dex 检查）
-# 5. NDK r27 → r25b
 # ============================================================
 
 name: Build Android APK (Fixed)
@@ -42,7 +41,6 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          # 先安装 libunwind-dev (libgstreamer1.0-dev 的依赖)
           sudo apt-get install -y libunwind-dev || true
           sudo apt-get install -y --no-install-recommends \
             build-essential git ffmpeg \
@@ -71,61 +69,23 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       # ─────────────────────────────────────────
-      # 5. 安装 Python 依赖（顺序很重要！）
+      # 5. 安装 Python 依赖
       # ─────────────────────────────────────────
       - name: Install Python dependencies
         run: |
           python --version
           pip install --upgrade pip setuptools wheel
-
-          # Cython 必须在 Kivy 之前安装，版本必须固定
           pip install cython==${{ env.CYTHON_VERSION }}
-
-          # Kivy
           pip install kivy==${{ env.KIVY_VERSION }}
-
-          # Pillow
           pip install pillow plyer
-
-          # buildozer
           pip install buildozer==${{ env.BUILDOZER_VERSION }}
-
           pip list | grep -E "kivy|cython|buildozer|pillow"
 
       # ─────────────────────────────────────────
-      # 6. Android SDK
+      # 6. Android SDK (使用可靠的actions)
       # ─────────────────────────────────────────
       - name: Setup Android SDK
-        run: |
-          ANDROID_SDK_ROOT=$HOME/android-sdk
-          mkdir -p $ANDROID_SDK_ROOT
-
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-
-          mkdir -p $ANDROID_SDK_ROOT/licenses
-          echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee" > $ANDROID_SDK_ROOT/licenses/android-sdk-license
-          echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" > $ANDROID_SDK_ROOT/licenses/android-sdk-preview-license
-          echo -e "\nd975f751698a77b662f1254ddbeed3901e976f5a" > $ANDROID_SDK_ROOT/licenses/intel-android-extra-license
-
-          if [ ! -d "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" ]; then
-            cd /tmp
-            wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline.zip
-            unzip -q cmdline.zip
-            mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
-            mv cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest
-            rm cmdline.zip
-          fi
-
-          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses \
-            --sdk_root=$ANDROID_SDK_ROOT > /dev/null 2>&1 || true
-
-          echo "=== Installing SDK ==="
-          $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager \
-            --sdk_root=$ANDROID_SDK_ROOT \
-            "platform-tools" "platforms;android-33" "platforms;android-34" "build-tools;34.0.0"
-
-          echo "=== SDK Ready ==="
-          ls $ANDROID_SDK_ROOT/
+        uses: android-actions/setup-android@v3
 
       # ─────────────────────────────────────────
       # 7. Android NDK r25b
@@ -165,12 +125,11 @@ jobs:
               cp $NDK_FLAGS $NDK_FLAGS.bak
               sed -i 's/if( arg IN_LIST ANDROID_SANITIZE )/# if( arg IN_LIST ANDROID_SANITIZE ) # PATCHED/' $NDK_FLAGS
               echo "Patched successfully"
-              grep -n "IN_LIST" $NDK_FLAGS || echo "All IN_LIST lines handled"
             else
               echo "No IN_LIST issue found"
             fi
           else
-            echo "WARNING: flags.cmake not found"
+            echo "WARNING: flags.cmake not found at $NDK_FLAGS"
           fi
 
       # ─────────────────────────────────────────
@@ -182,18 +141,8 @@ jobs:
           export ANDROID_NDK_ROOT=$ANDROID_NDK_HOME
 
           mkdir -p $HOME/.buildozer/android/platform
-          mkdir -p $HOME/.buildozer/android/platform
-          mkdir -p $HOME/.buildozer/android/platform
           ln -sf $ANDROID_SDK_ROOT $HOME/.buildozer/android/platform/android-sdk 2>/dev/null || true
-          # buildozer looks for sdkmanager at android-sdk/tools/bin/sdkmanager
-          # but we have it at cmdline-tools/latest/bin/sdkmanager
-          mkdir -p $HOME/.buildozer/android/platform/android-sdk/tools
-          ln -sf $HOME/android-sdk/cmdline-tools/latest $HOME/.buildozer/android/platform/android-sdk/tools/latest 2>/dev/null || true
-          ln -sf $HOME/android-sdk/cmdline-tools/latest/bin $HOME/.buildozer/android/platform/android-sdk/tools/bin 2>/dev/null || true
           ln -sf $ANDROID_NDK_ROOT $HOME/.buildozer/android/platform/android-ndk-r25b 2>/dev/null || true
-          echo "=== buildozer SDK paths ==="
-          ls -la $HOME/.buildozer/android/platform/
-          ls -la $HOME/.buildozer/android/platform/android-sdk/tools/
 
           echo "=== Environment ==="
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
@@ -204,9 +153,6 @@ jobs:
             echo "ERROR: buildozer.spec not found!"
             exit 1
           fi
-
-          echo "=== buildozer.spec ==="
-          cat buildozer.spec
 
       # ─────────────────────────────────────────
       # 10. 执行构建
@@ -249,7 +195,6 @@ jobs:
           echo "APK: $APK_FILE"
           ls -lh "$APK_FILE"
 
-          # 大小检查
           SIZE=$(stat -c%s "$APK_FILE")
           SIZE_MB=$((SIZE / 1024 / 1024))
           echo "Size: $SIZE bytes ($SIZE_MB MB)"
@@ -259,7 +204,6 @@ jobs:
             exit 1
           fi
 
-          # ZIP 头部检查
           HEADER=$(head -c 4 "$APK_FILE" | xxd | head -1)
           if ! echo "$HEADER" | grep -q "504b"; then
             echo "ERROR: Not a valid ZIP/APK file"
@@ -267,26 +211,21 @@ jobs:
           fi
           echo "ZIP header: OK"
 
-          # DEX 文件检查（关键！）
           DEX_COUNT=$(unzip -l "$APK_FILE" 2>/dev/null | grep -c "classes.dex" || echo "0")
           echo "classes.dex count: $DEX_COUNT"
 
           if [ "$DEX_COUNT" -eq 0 ]; then
             echo "ERROR: No classes.dex found — APK is fake or broken!"
-            unzip -l "$APK_FILE" 2>/dev/null | head -20
             exit 1
           fi
           echo "classes.dex: OK"
 
-          # Native 库检查
           SO_COUNT=$(unzip -l "$APK_FILE" 2>/dev/null | grep -c "\.so" || echo "0")
           echo "Native .so libraries: $SO_COUNT"
-          unzip -l "$APK_FILE" 2>/dev/null | grep "\.so" | head -5
 
           echo ""
           echo "✅ APK verification PASSED"
           echo "✅ Size: $SIZE_MB MB (> 5 MB)"
-          echo "✅ Valid APK structure"
           echo "✅ Contains $DEX_COUNT DEX file(s)"
           echo "✅ Contains $SO_COUNT native library files"
 
