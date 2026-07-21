@@ -314,6 +314,10 @@ class CutePet(Widget):
         self.weather_update_event = Clock.schedule_interval(self.update_weather_status, 1800)  # 每30分钟更新天气
         self.calendar_update_event = Clock.schedule_interval(self.update_calendar_status, 600)  # 每10分钟更新日历
         
+        # 天气城市配置（默认北京）
+        self.weather_city = 'Beijing'
+        self.load_settings()
+        
         self.draw_cute_pet()
         Clock.schedule_once(lambda dt: self.start_cute_idle(), 0.5)
         self.bubble_timer = Clock.schedule_interval(self.spawn_sleep_bubble, 3)
@@ -1903,9 +1907,38 @@ class DesktopPetAlarmApp(App):
         
         # 添加心情、天气、日历显示标签
         self.add_mood_weather_calendar_labels()
+
+        # 加载应用设置
+        self.load_settings()
         
 
 
+    
+    def load_settings(self):
+        """加载应用设置（天气城市等）"""
+        try:
+            config_path = get_config_path('app_settings.json')
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    settings = json.load(f)
+                    self.weather_city = settings.get('weather_city', 'Beijing')
+            else:
+                self.weather_city = 'Beijing'
+        except Exception as e:
+            print(f"加载设置失败: {e}")
+            self.weather_city = 'Beijing'
+    
+    def save_settings(self):
+        """保存应用设置"""
+        try:
+            config_path = get_config_path('app_settings.json')
+            settings = {
+                'weather_city': self.weather_city,
+            }
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(settings, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"保存设置失败: {e}")
     
     def load_alarm_sound(self):
         try:
@@ -2070,7 +2103,7 @@ class DesktopPetAlarmApp(App):
     def update_mood_status(self, dt):
         if self.pet:
             current_time = datetime.now()
-            weather_data = self.pet.weather_api.get_current_weather()
+            weather_data = self.pet.weather_api.get_current_weather(self.weather_city)
             weather_impact = weather_data.get('impact', 'normal') if weather_data else 'normal'
             next_event = self.pet.calendar.get_next_event()
             
@@ -2095,12 +2128,12 @@ class DesktopPetAlarmApp(App):
 
     def update_weather_status(self, dt):
         if self.pet:
-            weather_data = self.pet.weather_api.get_current_weather()
+            weather_data = self.pet.weather_api.get_current_weather(self.weather_city)
             self.pet.current_weather = weather_data
             
             # 更新天气显示
             if self.weather_label:
-                weather_info = self.pet.weather_api.get_weather_for_pet()
+                weather_info = self.pet.weather_api.get_weather_for_pet(self.weather_city)
                 self.weather_label.text = f"天气: {weather_info['description']} {weather_info['emoji']}"
                 self.weather_label.color = CUTE_COLORS['secondary']
 
@@ -2118,6 +2151,71 @@ class DesktopPetAlarmApp(App):
                 else:
                     self.calendar_label.text = "日历: 无事件"
                     self.calendar_label.color = CUTE_COLORS['text']
+
+    def on_pause(self):
+        """Android 应用暂停时保存状态并暂停定时器"""
+        try:
+            # 暂停闹钟检查定时器
+            if self.alarm_manager and self.alarm_manager.alarm_check_event:
+                self.alarm_manager.alarm_check_event.cancel()
+                self.alarm_manager.alarm_check_event = None
+            
+            # 暂停睡眠检查定时器
+            if self.sleep_check_event:
+                self.sleep_check_event.cancel()
+                self.sleep_check_event = None
+            
+            # 暂停宠物定时器
+            if self.pet:
+                if self.pet.mood_update_event:
+                    self.pet.mood_update_event.cancel()
+                    self.pet.mood_update_event = None
+                if self.pet.weather_update_event:
+                    self.pet.weather_update_event.cancel()
+                    self.pet.weather_update_event = None
+                if self.pet.calendar_update_event:
+                    self.pet.calendar_update_event.cancel()
+                    self.pet.calendar_update_event = None
+            
+            # 保存闹钟状态
+            if self.alarm_manager:
+                self.alarm_manager.save_alarms()
+            
+            # 保存窗口位置
+            try:
+                window_pos = {
+                    'left': Window.left,
+                    'top': Window.top,
+                    'pet_size': self.pet.pet_size if self.pet else 160,
+                    'pet_opacity': self.pet.pet_opacity if self.pet else 1.0
+                }
+                with open('window_pos.json', 'w', encoding='utf-8') as f:
+                    json.dump(window_pos, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                print(f"保存窗口位置失败: {e}")
+            
+            print("应用已暂停，状态已保存")
+            return True
+        except Exception as e:
+            print(f"暂停时出错: {e}")
+            return True
+    
+    def on_resume(self):
+        """Android 应用恢复时重新启动定时器"""
+        try:
+            self.sleep_check_event = Clock.schedule_interval(self.check_pet_sleep_state, 60)
+            
+            if self.pet:
+                self.pet.mood_update_event = Clock.schedule_interval(self.pet.update_mood_status, 30)
+                self.pet.weather_update_event = Clock.schedule_interval(self.pet.update_weather_status, 1800)
+                self.pet.calendar_update_event = Clock.schedule_interval(self.update_calendar_status, 600)
+            
+            if self.alarm_manager:
+                self.alarm_manager.schedule_next_alarm()
+            
+            print("应用已恢复，定时器已重新启动")
+        except Exception as e:
+            print(f"恢复时出错: {e}")
 
     def on_stop(self):
         if self.alarm_manager:
