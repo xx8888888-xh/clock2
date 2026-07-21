@@ -187,9 +187,9 @@ class WeatherAPI:
                     'impact': 'normal'
                 }
     
-    def get_weather_for_pet(self):
+    def get_weather_for_pet(self, city="Beijing"):
         """获取适合宠物显示的天气信息"""
-        weather = self.get_current_weather()
+        weather = self.get_current_weather(city)
         
         pet_weather_data = {
             'emoji': self._get_weather_emoji(weather['description']),
