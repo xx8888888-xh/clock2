@@ -1,5 +1,5 @@
 """
-安卓桌面宠物闹钟 - 完全修复版 V3.2
+安卓桌面宠物闹钟 - 完全修复版 V3.3
 修复内存泄漏和定时器清理问题
 """
 
@@ -2266,7 +2266,10 @@ class DesktopPetAlarmApp(App):
         for evt_name in ['mood_update_event', 'weather_update_event', 'calendar_update_event']:
             evt = getattr(self, evt_name, None)
             if evt:
-                evt.cancel()
+                try:
+                    evt.cancel()
+                except Exception:
+                    pass
                 setattr(self, evt_name, None)
         
         try:
@@ -2276,7 +2279,8 @@ class DesktopPetAlarmApp(App):
                 'pet_size': self.pet.pet_size if self.pet else 160,
                 'pet_opacity': self.pet.pet_opacity if self.pet else 1.0
             }
-            with open('window_pos.json', 'w', encoding='utf-8') as f:
+            window_pos_path = get_config_path('window_pos.json')
+            with open(window_pos_path, 'w', encoding='utf-8') as f:
                 json.dump(window_pos, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"保存窗口位置失败: {e}")
@@ -2299,8 +2303,9 @@ class DesktopPetAlarmApp(App):
         
         # 恢复窗口位置
         try:
-            if os.path.exists('window_pos.json'):
-                with open('window_pos.json', 'r', encoding='utf-8') as f:
+            window_pos_path = get_config_path('window_pos.json')
+            if os.path.exists(window_pos_path):
+                with open(window_pos_path, 'r', encoding='utf-8') as f:
                     window_pos = json.load(f)
                 Window.left = window_pos.get('left', 100)
                 Window.top = window_pos.get('top', 500)
@@ -2310,6 +2315,10 @@ class DesktopPetAlarmApp(App):
                     self.pet.opacity = self.pet.pet_opacity
         except Exception as e:
             print(f"恢复窗口位置失败: {e}")
+
+    def on_exit(self):
+        """应用退出时的回调"""
+        self.on_stop()
 
 
 # ==================== 应用入口 ====================
