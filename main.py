@@ -737,8 +737,10 @@ class AlarmClock:
     
     def add_alarm(self, hour, minute, label="闹钟", content="时间到了！", 
                   repeat_days=None, enabled=True):
+        # 使用最大ID+1，避免删除后ID冲突
+        next_id = max([a['id'] for a in self.alarms], default=-1) + 1
         alarm = {
-            'id': len(self.alarms),
+            'id': next_id,
             'hour': hour,
             'minute': minute,
             'label': label,
@@ -2289,14 +2291,11 @@ class DesktopPetAlarmApp(App):
                 try:
                     from android import AndroidApplication
                     AndroidApplication.start_service()
-                except Exception:
+                except ImportError:
+                    # 非完整Android环境
                     pass
-
-                if self.root is None:
-                    from kivy.clock import Clock
-                    Clock.schedule_once(lambda dt: self.init_app_window(), 0.5)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"启动服务失败: {e}")
         
         # 恢复窗口位置
         try:
@@ -2309,8 +2308,8 @@ class DesktopPetAlarmApp(App):
                     self.pet.pet_size = window_pos.get('pet_size', 160)
                     self.pet.pet_opacity = window_pos.get('pet_opacity', 1.0)
                     self.pet.opacity = self.pet.pet_opacity
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"恢复窗口位置失败: {e}")
 
 
 # ==================== 应用入口 ====================
