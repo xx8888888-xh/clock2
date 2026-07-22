@@ -315,7 +315,6 @@ class CutePet(Widget):
         
         # 天气城市配置（默认北京）
         self.weather_city = 'Beijing'
-        self.load_settings()
         
         self.draw_cute_pet()
         Clock.schedule_once(lambda dt: self.start_cute_idle(), 0.5)
