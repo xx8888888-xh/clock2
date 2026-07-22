@@ -1718,7 +1718,54 @@ class SettingsDialog(CutePopup):
         sound_layout.add_widget(self.sound_switch)
         layout.add_widget(sound_layout)
         
-        button_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(15))
+        # 天气设置
+        weather_label = Label(text='🌤️ 天气设置:', size_hint_y=0.08, font_size=sp(16), color=CUTE_COLORS['text'])
+        layout.add_widget(weather_label)
+        
+        city_layout = BoxLayout(orientation='horizontal', size_hint_y=0.1, spacing=dp(10))
+        city_layout.add_widget(Label(text='🏙️ 城市:', size_hint_x=0.25, font_size=sp(14), color=CUTE_COLORS['text']))
+        self.city_input = TextInput(
+            text=self.app.weather_city,
+            hint_text='输入城市名称',
+            size_hint_x=0.45,
+            multiline=False,
+            write_tab=False
+        )
+        self.city_input.bind(on_text_validate=self.on_city_change)
+        city_layout.add_widget(self.city_input)
+        
+        apply_city_btn = CuteButton(text='应用', size_hint_x=0.3, font_size=sp(12))
+        apply_city_btn.bind(on_press=self.on_city_change)
+        city_layout.add_widget(apply_city_btn)
+        layout.add_widget(city_layout)
+        
+        api_key_layout = BoxLayout(orientation='horizontal', size_hint_y=0.1, spacing=dp(10))
+        api_key_layout.add_widget(Label(text='🔑 API Key:', size_hint_x=0.25, font_size=sp(14), color=CUTE_COLORS['text']))
+        self.api_key_input = TextInput(
+            text=self.app.pet.weather_api.api_key if hasattr(self.app, 'pet') and hasattr(self.app.pet, 'weather_api') else '',
+            hint_text='OpenWeatherMap API Key（可选）',
+            size_hint_x=0.45,
+            multiline=False,
+            write_tab=False,
+            password=True
+        )
+        self.api_key_input.bind(on_text_validate=self.on_api_key_change)
+        api_key_layout.add_widget(self.api_key_input)
+        
+        apply_api_btn = CuteButton(text='应用', size_hint_x=0.3, font_size=sp(12))
+        apply_api_btn.bind(on_press=self.on_api_key_change)
+        api_key_layout.add_widget(apply_api_btn)
+        layout.add_widget(api_key_layout)
+        
+        api_hint = Label(
+            text='💡 获取免费API Key: openweathermap.org/api',
+            size_hint_y=0.05,
+            font_size=sp(11),
+            color=CUTE_COLORS['secondary']
+        )
+        layout.add_widget(api_hint)
+        
+        button_layout = BoxLayout(orientation='horizontal', size_hint_y=0.1, spacing=dp(15))
         
         reset_btn = CuteButton(text='🔄 重置')
         reset_btn.bind(on_press=self.reset_settings)
@@ -1756,6 +1803,21 @@ class SettingsDialog(CutePopup):
     def on_sound_change(self, instance, value):
         self.app.alarm_manager.settings['sound_enabled'] = value
         self.app.alarm_manager.save_settings()
+    
+    def on_city_change(self, instance):
+        new_city = self.city_input.text.strip()
+        if new_city:
+            self.app.weather_city = new_city
+            self.app.alarm_manager.save_settings()
+            self.app.show_notification(f"天气城市已设置为: {new_city}")
+    
+    def on_api_key_change(self, instance):
+        new_key = self.api_key_input.text.strip()
+        if new_key:
+            if hasattr(self.app, 'pet') and hasattr(self.app.pet, 'weather_api'):
+                self.app.pet.weather_api.api_key = new_key
+            self.app.alarm_manager.save_settings()
+            self.app.show_notification("天气API Key已更新")
     
     def reset_settings(self, instance):
         self.size_slider.value = 160
@@ -1969,15 +2031,25 @@ class DesktopPetAlarmApp(App):
             print(f"保存设置失败: {e}")
     
     def load_alarm_sound(self):
+        """加载闹钟声音，包含备用beep生成"""
+        sound_loaded = False
         try:
             sound_files = ['alarm.wav', 'alarm.mp3', 'assets/alarm.wav']
             for sound_file in sound_files:
                 path = resource_path(sound_file)
                 if os.path.exists(path):
                     self.alarm_sound = SoundLoader.load(path)
-                    break
+                    if self.alarm_sound:
+                        sound_loaded = True
+                        print(f"✅ 闹钟声音已加载: {sound_file}")
+                        break
         except Exception as e:
-            print(f"加载声音失败: {e}")
+            print(f"加载声音文件失败: {e}")
+        
+        # 如果没有声音文件，使用系统蜂鸣作为备用
+        if not sound_loaded:
+            print("⚠️ 未找到声音文件，将使用系统蜂鸣")
+            self.alarm_sound = None
     
     def show_main_menu(self):
         menu = MainMenu(self)
@@ -2047,12 +2119,25 @@ class DesktopPetAlarmApp(App):
         dialog.open()
     
     def play_alarm_sound(self):
+        """播放闹钟声音，支持多种回退方案"""
         try:
-            if (self.alarm_manager.settings.get('sound_enabled', True) and 
-                self.alarm_sound):
+            if not self.alarm_manager.settings.get('sound_enabled', True):
+                return
+            
+            # 优先使用加载的声音文件
+            if self.alarm_sound:
                 volume = self.alarm_manager.settings.get('volume', 0.8)
                 self.alarm_sound.volume = volume
                 self.alarm_sound.play()
+                return
+            
+            # 备用：使用系统提示音（通过notification）
+            notification.notify(
+                title="🔔 宠物闹钟响了！",
+                message="时间到了！",
+                app_name='宠物闹钟',
+                timeout=3
+            )
         except Exception as e:
             print(f"播放声音失败: {e}")
     
