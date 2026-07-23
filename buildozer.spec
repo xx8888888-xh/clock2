@@ -5,7 +5,7 @@ package.domain = org.petalarm
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json,ttf,wav,mp3
 source.main = main.py
-version = 3.0.0
+version = 3.4.0
 requirements = python3,kivy==2.3.0,plyer,pillow,requests
 icon.filename = icon.png
 orientation = portrait

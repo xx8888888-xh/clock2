@@ -5,6 +5,8 @@
 
 import datetime
 import random
+import json
+import os
 
 class PetMoodSystem:
     """宠物心情系统"""
@@ -81,8 +83,8 @@ class PetMoodSystem:
             elif calendar_event['type'] == 'meeting':
                 mood_score -= 10
         
-        # 5. 随机因素
-        mood_score += random.randint(-5, 5)
+        # 5. 随机因素（减小权重，避免过度随机）
+        mood_score += random.randint(-2, 2)
         
         # 确定最终心情
         if mood_score >= 20:
@@ -126,6 +128,55 @@ class PetMoodSystem:
             'angry': '😠'
         }
         return emoji_map.get(mood, '😐')
+    
+    def save_state(self):
+        """保存宠物状态到文件（持久化）"""
+        import os
+        try:
+            from kivy.app import App
+            app = App.get_running_app()
+            if app:
+                config_path = os.path.join(app.user_data_dir, 'pet_state.json')
+            else:
+                config_path = 'pet_state.json'
+            
+            state = {
+                'current_mood': self.current_mood,
+                'last_interaction_time': self.last_interaction_time.isoformat(),
+                'interaction_count': self.interaction_count
+            }
+            
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(state, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            print(f"保存宠物状态失败: {e}")
+            return False
+    
+    def load_state(self):
+        """从文件加载宠物状态"""
+        import os
+        try:
+            from kivy.app import App
+            app = App.get_running_app()
+            if app:
+                config_path = os.path.join(app.user_data_dir, 'pet_state.json')
+            else:
+                config_path = 'pet_state.json'
+            
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    state = json.load(f)
+                
+                self.current_mood = state.get('current_mood', 'normal')
+                self.last_interaction_time = datetime.datetime.fromisoformat(
+                    state.get('last_interaction_time', datetime.datetime.now().isoformat())
+                )
+                self.interaction_count = state.get('interaction_count', 0)
+                return True
+        except Exception as e:
+            print(f"加载宠物状态失败: {e}")
+        return False
     
     def get_mood_description(self, mood):
         """获取心情描述"""
