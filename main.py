@@ -1740,8 +1740,17 @@ class SettingsDialog(CutePopup):
         
         api_key_layout = BoxLayout(orientation='horizontal', size_hint_y=0.1, spacing=dp(10))
         api_key_layout.add_widget(Label(text='🔑 API Key:', size_hint_x=0.25, font_size=sp(14), color=CUTE_COLORS['text']))
+        # 获取API Key的辅助函数
+        def _get_api_key():
+            try:
+                if hasattr(self.app, 'pet') and self.app.pet and hasattr(self.app.pet, 'weather_api'):
+                    return self.app.pet.weather_api.api_key or ''
+            except Exception:
+                pass
+            return ''
+        
         self.api_key_input = TextInput(
-            text=self.app.pet.weather_api.api_key if hasattr(self.app, 'pet') and hasattr(self.app.pet, 'weather_api') else '',
+            text=_get_api_key(),
             hint_text='OpenWeatherMap API Key（可选）',
             size_hint_x=0.45,
             multiline=False,
@@ -1807,6 +1816,7 @@ class SettingsDialog(CutePopup):
         new_city = self.city_input.text.strip()
         if new_city:
             self.app.weather_city = new_city
+            self.app.save_settings()  # 保存应用设置（包括城市）
             self.app.alarm_manager.save_settings()
             self.app.show_notification(f"天气城市已设置为: {new_city}")
     
@@ -2300,7 +2310,8 @@ class DesktopPetAlarmApp(App):
                     'pet_size': self.pet.pet_size if self.pet else 160,
                     'pet_opacity': self.pet.pet_opacity if self.pet else 1.0
                 }
-                with open('window_pos.json', 'w', encoding='utf-8') as f:
+                window_pos_path = get_config_path('window_pos.json')
+                with open(window_pos_path, 'w', encoding='utf-8') as f:
                     json.dump(window_pos, f, ensure_ascii=False, indent=2)
             except Exception as e:
                 print(f"保存窗口位置失败: {e}")
