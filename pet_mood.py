@@ -178,6 +178,12 @@ class PetMoodSystem:
             print(f"加载宠物状态失败: {e}")
         return False
     
+    def reset_state(self):
+        """重置宠物状态到默认"""
+        self.current_mood = 'normal'
+        self.last_interaction_time = datetime.datetime.now()
+        self.interaction_count = 0
+    
     def get_mood_description(self, mood):
         """获取心情描述"""
         description_map = {

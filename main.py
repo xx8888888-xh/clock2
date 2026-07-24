@@ -1,5 +1,5 @@
 """
-安卓桌面宠物闹钟 - 完全修复版 V3.4
+安卓桌面宠物闹钟 - 完全修复版 V3.5
 修复内存泄漏、定时器清理和状态持久化问题
 """
 
@@ -797,6 +797,9 @@ class AlarmClock:
         return added_count, error_count
     
     def remove_alarm(self, alarm_id):
+        # 清理关联的贪睡闹钟（修复：同时清理 snooze_alarms 字典中的 key）
+        if alarm_id in self.snooze_alarms:
+            del self.snooze_alarms[alarm_id]
         self.alarms = [a for a in self.alarms if a['id'] != alarm_id]
         for i, alarm in enumerate(self.alarms):
             alarm['id'] = i
@@ -1929,13 +1932,13 @@ class DesktopPetAlarmApp(App):
         
         self.load_alarm_sound()
         
+        # 加载应用设置（必须在 add_mood_weather_calendar_labels 之前）
+        self.load_settings()
+        
         self.sleep_check_event = Clock.schedule_interval(self.check_pet_sleep_state, 60)
         
         # 添加心情、天气、日历显示标签
         self.add_mood_weather_calendar_labels()
-
-        # 加载应用设置
-        self.load_settings()
         
 
 
@@ -2233,10 +2236,21 @@ class DesktopPetAlarmApp(App):
     def on_resume(self):
         """Android 应用恢复时重新启动定时器"""
         try:
+            # 先取消旧的睡眠检查定时器（如果存在）
+            if self.sleep_check_event:
+                self.sleep_check_event.cancel()
             self.sleep_check_event = Clock.schedule_interval(self.check_pet_sleep_state, 60)
             
             if self.pet:
-                # 修复：使用 App 类的方法，而不是 Pet 类
+                # 先取消旧的心跳/天气/日历定时器（如果存在）
+                if self.pet.mood_update_event:
+                    self.pet.mood_update_event.cancel()
+                if self.pet.weather_update_event:
+                    self.pet.weather_update_event.cancel()
+                if self.pet.calendar_update_event:
+                    self.pet.calendar_update_event.cancel()
+                
+                # 重新创建定时器引用到 Pet 对象
                 self.pet.mood_update_event = Clock.schedule_interval(self.update_mood_status, 30)
                 self.pet.weather_update_event = Clock.schedule_interval(self.update_weather_status, 1800)
                 self.pet.calendar_update_event = Clock.schedule_interval(self.update_calendar_status, 600)

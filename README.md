@@ -102,6 +102,7 @@ weather_api = WeatherAPI(api_key='your_openweathermap_key')
 
 ## 版本历史
 
+- **V3.5**: 修复 on_resume 定时器泄漏、闹钟删除清理贪睡数据、天气请求超时
 - **V3.4**: 宠物状态持久化、应用内城市设置、on_resume回调修复
 - V3.3: 修复on_resume天气定时器、window_pos路径、添加on_exit
 - V3.2: 修复悬浮窗初始化时序问题
