@@ -1,6 +1,6 @@
 """
-安卓桌面宠物闹钟 - 完全修复版 V3.3
-修复内存泄漏和定时器清理问题
+安卓桌面宠物闹钟 - 完全修复版 V3.5
+修复内存泄漏、定时器清理和状态持久化问题
 """
 
 import os
@@ -309,13 +309,17 @@ class CutePet(Widget):
         self.weather_update_event = None
         self.calendar_update_event = None
         
-        # 定时更新心情、天气、日历（回调App级别的方法）
-        # 注意：这些定时器在 CutePet 中创建，但回调由 App 处理
-        # 具体实现由 DesktopPetAlarmApp 的 update_mood/weather/calendar_status 方法处理
+        # 定时更新心情、天气、日历
+        self.mood_update_event = Clock.schedule_interval(self.update_mood_status, 30)  # 每30秒更新心情
+        self.weather_update_event = Clock.schedule_interval(self.update_weather_status, 1800)  # 每30分钟更新天气
+        self.calendar_update_event = Clock.schedule_interval(self.update_calendar_status, 600)  # 每10分钟更新日历
         
         # 天气城市配置（默认北京）
         self.weather_city = 'Beijing'
         self.load_settings()
+        
+        # 加载宠物持久化状态（新功能）
+        self.mood_system.load_state()
         
         self.draw_cute_pet()
         Clock.schedule_once(lambda dt: self.start_cute_idle(), 0.5)
@@ -737,10 +741,8 @@ class AlarmClock:
     
     def add_alarm(self, hour, minute, label="闹钟", content="时间到了！", 
                   repeat_days=None, enabled=True):
-        # 使用最大ID+1，避免删除后ID冲突
-        next_id = max([a['id'] for a in self.alarms], default=-1) + 1
         alarm = {
-            'id': next_id,
+            'id': len(self.alarms),
             'hour': hour,
             'minute': minute,
             'label': label,
@@ -795,6 +797,9 @@ class AlarmClock:
         return added_count, error_count
     
     def remove_alarm(self, alarm_id):
+        # 清理关联的贪睡闹钟（修复：同时清理 snooze_alarms 字典中的 key）
+        if alarm_id in self.snooze_alarms:
+            del self.snooze_alarms[alarm_id]
         self.alarms = [a for a in self.alarms if a['id'] != alarm_id]
         for i, alarm in enumerate(self.alarms):
             alarm['id'] = i
@@ -1718,6 +1723,20 @@ class SettingsDialog(CutePopup):
         sound_layout.add_widget(self.sound_switch)
         layout.add_widget(sound_layout)
         
+        # 天气城市设置（新增）
+        city_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(10))
+        city_layout.add_widget(Label(text='🌤️ 天气城市:', size_hint_x=0.4, font_size=sp(14), color=CUTE_COLORS['text']))
+        self.city_input = TextInput(
+            text=self.app.weather_city,
+            multiline=False,
+            size_hint_x=0.6,
+            font_size=sp(14),
+            background_color=CUTE_COLORS['background']
+        )
+        self.city_input.bind(on_text_validate=self.on_city_change)
+        city_layout.add_widget(self.city_input)
+        layout.add_widget(city_layout)
+        
         button_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(15))
         
         reset_btn = CuteButton(text='🔄 重置')
@@ -1756,6 +1775,15 @@ class SettingsDialog(CutePopup):
     def on_sound_change(self, instance, value):
         self.app.alarm_manager.settings['sound_enabled'] = value
         self.app.alarm_manager.save_settings()
+    
+    def on_city_change(self, instance):
+        """天气城市变更处理"""
+        new_city = instance.text.strip()
+        if new_city:
+            self.app.weather_city = new_city
+            self.app.save_settings()
+            # 立即更新天气显示
+            self.app.update_weather_status(0)
     
     def reset_settings(self, instance):
         self.size_slider.value = 160
@@ -1829,62 +1857,42 @@ class DesktopPetAlarmApp(App):
         self.sleep_check_event = None
         self.alarm_sound = None
         self.banner_display_time = 5
-        self.weather_city = 'Beijing'  # 天气城市配置（默认北京）
-        self.mood_update_event = None
-        self.weather_update_event = None
-        self.calendar_update_event = None
-        self.mood_label = None
-        self.weather_label = None
-        self.calendar_label = None
     
     def build(self):
-        """Kivy 应用入口 - 修复悬浮窗初始化时序问题"""
         from kivy.utils import platform
         from kivy.uix.widget import Widget
         from kivy.clock import Clock
 
         if platform == "android":
             try:
-                from android.permissions import Permission, request_permission, check_permission
+                from android.permissions import Permission, request_permission
+                from android.permissions import check_permission
 
-                def init_window(ignore_permission=False):
-                    """延迟初始化窗口，确保权限已授予"""
-                    if not ignore_permission:
-                        if not check_permission(Permission.SYSTEM_ALERT_WINDOW):
-                            # 权限未授予，等待用户授权后重试
-                            def permission_callback(permissions, results):
-                                Clock.schedule_once(
-                                    lambda dt: init_window(ignore_permission=True), 0.5
-                                )
-                            request_permission(Permission.SYSTEM_ALERT_WINDOW, permission_callback)
-                            return
-                    
-                    # 权限已授予或忽略，执行初始化
-                    self.init_app_window()
+                has_permission = check_permission(Permission.SYSTEM_ALERT_WINDOW)
 
-                # 立即尝试初始化（如果权限已授予会成功）
-                Clock.schedule_once(lambda dt: init_window(ignore_permission=False), 0.1)
-                return Widget()  # 返回空白Widget，init_app_window会设置真正的root
-                
+                if has_permission:
+                    Clock.schedule_once(lambda dt: self.init_app_window(), 0.5)
+                else:
+                    def callback(permissions, results):
+                        if all(results):
+                            Clock.schedule_once(lambda dt: self.init_app_window(), 1)
+                        else:
+                            Clock.schedule_once(lambda dt: self.init_app_window(), 1)
+
+                    request_permission(Permission.SYSTEM_ALERT_WINDOW, callback)
+
+                return Widget()
             except ImportError:
-                # 非完整Android环境（如模拟器），直接初始化
                 Clock.schedule_once(lambda dt: self.init_app_window(), 0.5)
                 return Widget()
-            except Exception as e:
-                print(f"Android权限检查失败: {e}")
+            except Exception:
                 Clock.schedule_once(lambda dt: self.init_app_window(), 0.5)
                 return Widget()
         else:
-            # 桌面环境直接初始化
-            self.init_app_window()
-            return self.root if hasattr(self, 'root') and self.root else Widget()
+            return self.init_app_window()
     
     def init_app_window(self):
-        """初始化应用窗口 - 修复 root 初始化时序问题"""
-        # 确保 self.root 存在
-        if self.root is None:
-            self.root = FloatLayout()
-        
+        """初始化应用窗口"""
         try:
             Window.borderless = True
             Window.always_on_top = True
@@ -1895,7 +1903,8 @@ class DesktopPetAlarmApp(App):
 
             from kivy.utils import platform
             if platform == "android":
-                # Android悬浮窗透明度：alpha=0.5 约50%透明，可见但不过分突兀
+                # 关键修复：Android悬浮窗透明度
+                # Alpha=0.5 → 50%透明，可见但不太突兀
                 Window.clearcolor = (0.95, 0.95, 0.95, 0.5)
                 Window.top = 300
                 Window.left = 50
@@ -1903,41 +1912,33 @@ class DesktopPetAlarmApp(App):
                 Window.always_on_top = True
                 Window.borderless = True
                 Window.resizable = False
+            else:
+                pass
         except Exception as e:
             print(f"窗口初始化失败: {e}")
+            from kivy.uix.widget import Widget
+            return Widget()
 
-        # 初始化管理器
-        if self.alarm_manager is None:
-            self.alarm_manager = AlarmClock()
-        if self.timer_manager is None:
-            self.timer_manager = TimerManager()
+        self.root = FloatLayout()
         
-        # 创建宠物（如果尚未创建）
-        if not any(isinstance(w, CutePet) for w in self.root.children):
-            self.pet = CutePet()
-            self.root.add_widget(self.pet)
+        self.alarm_manager = AlarmClock()
+        self.timer_manager = TimerManager()
         
-        # 创建横幅（如果尚未创建）
-        if not any(isinstance(w, CuteBanner) for w in self.root.children):
-            self.banner = CuteBanner()
-            self.root.add_widget(self.banner)
+        self.pet = CutePet()
+        self.root.add_widget(self.pet)
         
-        # 加载闹钟声音
+        self.banner = CuteBanner()
+        self.root.add_widget(self.banner)
+        
         self.load_alarm_sound()
         
-        # 启动睡眠检查定时器
-        self.sleep_check_event = Clock.schedule_interval(self.check_pet_sleep_state, 60)
+        # 加载应用设置（必须在 add_mood_weather_calendar_labels 之前）
+        self.load_settings()
         
-        # 启动心情/天气/日历更新定时器（由App统一管理）
-        self.mood_update_event = Clock.schedule_interval(self.update_mood_status, 30)  # 每30秒更新心情
-        self.weather_update_event = Clock.schedule_interval(self.update_weather_status, 1800)  # 每30分钟更新天气
-        self.calendar_update_event = Clock.schedule_interval(self.update_calendar_status, 600)  # 每10分钟更新日历
+        self.sleep_check_event = Clock.schedule_interval(self.check_pet_sleep_state, 60)
         
         # 添加心情、天气、日历显示标签
         self.add_mood_weather_calendar_labels()
-
-        # 加载应用设置
-        self.load_settings()
         
 
 
@@ -2153,6 +2154,9 @@ class DesktopPetAlarmApp(App):
                 mood_emoji = self.pet.mood_system.generate_mood_emoji(new_mood)
                 self.mood_label.text = f"心情: {new_mood} {mood_emoji}"
                 self.mood_label.color = self.pet.mood_system.get_mood_color(new_mood)
+            
+            # 每5分钟保存一次宠物状态
+            self.pet.mood_system.save_state()
 
     def update_weather_status(self, dt):
         if self.pet:
@@ -2193,22 +2197,23 @@ class DesktopPetAlarmApp(App):
                 self.sleep_check_event.cancel()
                 self.sleep_check_event = None
             
-            # 暂停心情/天气/日历更新定时器
-            if hasattr(self, 'mood_update_event') and self.mood_update_event:
-                self.mood_update_event.cancel()
-                self.mood_update_event = None
-            if hasattr(self, 'weather_update_event') and self.weather_update_event:
-                self.weather_update_event.cancel()
-                self.weather_update_event = None
-            if hasattr(self, 'calendar_update_event') and self.calendar_update_event:
-                self.calendar_update_event.cancel()
-                self.calendar_update_event = None
+            # 暂停宠物定时器
+            if self.pet:
+                if self.pet.mood_update_event:
+                    self.pet.mood_update_event.cancel()
+                    self.pet.mood_update_event = None
+                if self.pet.weather_update_event:
+                    self.pet.weather_update_event.cancel()
+                    self.pet.weather_update_event = None
+                if self.pet.calendar_update_event:
+                    self.pet.calendar_update_event.cancel()
+                    self.pet.calendar_update_event = None
             
             # 保存闹钟状态
             if self.alarm_manager:
                 self.alarm_manager.save_alarms()
             
-            # 保存窗口位置
+            # 保存窗口位置（使用 get_config_path 确保跨平台）
             try:
                 window_pos = {
                     'left': Window.left,
@@ -2216,7 +2221,8 @@ class DesktopPetAlarmApp(App):
                     'pet_size': self.pet.pet_size if self.pet else 160,
                     'pet_opacity': self.pet.pet_opacity if self.pet else 1.0
                 }
-                with open('window_pos.json', 'w', encoding='utf-8') as f:
+                config_path = get_config_path('window_pos.json')
+                with open(config_path, 'w', encoding='utf-8') as f:
                     json.dump(window_pos, f, ensure_ascii=False, indent=2)
             except Exception as e:
                 print(f"保存窗口位置失败: {e}")
@@ -2230,12 +2236,24 @@ class DesktopPetAlarmApp(App):
     def on_resume(self):
         """Android 应用恢复时重新启动定时器"""
         try:
+            # 先取消旧的睡眠检查定时器（如果存在）
+            if self.sleep_check_event:
+                self.sleep_check_event.cancel()
             self.sleep_check_event = Clock.schedule_interval(self.check_pet_sleep_state, 60)
             
-            # 重新启动心情/天气/日历更新定时器
-            self.mood_update_event = Clock.schedule_interval(self.update_mood_status, 30)
-            self.weather_update_event = Clock.schedule_interval(self.update_weather_status, 1800)
-            self.calendar_update_event = Clock.schedule_interval(self.update_calendar_status, 600)
+            if self.pet:
+                # 先取消旧的心跳/天气/日历定时器（如果存在）
+                if self.pet.mood_update_event:
+                    self.pet.mood_update_event.cancel()
+                if self.pet.weather_update_event:
+                    self.pet.weather_update_event.cancel()
+                if self.pet.calendar_update_event:
+                    self.pet.calendar_update_event.cancel()
+                
+                # 重新创建定时器引用到 Pet 对象
+                self.pet.mood_update_event = Clock.schedule_interval(self.update_mood_status, 30)
+                self.pet.weather_update_event = Clock.schedule_interval(self.update_weather_status, 1800)
+                self.pet.calendar_update_event = Clock.schedule_interval(self.update_calendar_status, 600)
             
             if self.alarm_manager:
                 self.alarm_manager.schedule_next_alarm()
@@ -2262,16 +2280,6 @@ class DesktopPetAlarmApp(App):
         if self.sleep_check_event:
             self.sleep_check_event.cancel()
         
-        # 清理心情/天气/日历更新定时器
-        for evt_name in ['mood_update_event', 'weather_update_event', 'calendar_update_event']:
-            evt = getattr(self, evt_name, None)
-            if evt:
-                try:
-                    evt.cancel()
-                except Exception:
-                    pass
-                setattr(self, evt_name, None)
-        
         try:
             window_pos = {
                 'left': Window.left,
@@ -2279,8 +2287,8 @@ class DesktopPetAlarmApp(App):
                 'pet_size': self.pet.pet_size if self.pet else 160,
                 'pet_opacity': self.pet.pet_opacity if self.pet else 1.0
             }
-            window_pos_path = get_config_path('window_pos.json')
-            with open(window_pos_path, 'w', encoding='utf-8') as f:
+            config_path = get_config_path('window_pos.json')
+            with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(window_pos, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"保存窗口位置失败: {e}")
@@ -2295,17 +2303,20 @@ class DesktopPetAlarmApp(App):
                 try:
                     from android import AndroidApplication
                     AndroidApplication.start_service()
-                except ImportError:
-                    # 非完整Android环境
+                except Exception:
                     pass
-        except Exception as e:
-            print(f"启动服务失败: {e}")
+
+                if self.root is None:
+                    from kivy.clock import Clock
+                    Clock.schedule_once(lambda dt: self.init_app_window(), 0.5)
+        except Exception:
+            pass
         
         # 恢复窗口位置
         try:
-            window_pos_path = get_config_path('window_pos.json')
-            if os.path.exists(window_pos_path):
-                with open(window_pos_path, 'r', encoding='utf-8') as f:
+            config_path = get_config_path('window_pos.json')
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
                     window_pos = json.load(f)
                 Window.left = window_pos.get('left', 100)
                 Window.top = window_pos.get('top', 500)
@@ -2313,12 +2324,8 @@ class DesktopPetAlarmApp(App):
                     self.pet.pet_size = window_pos.get('pet_size', 160)
                     self.pet.pet_opacity = window_pos.get('pet_opacity', 1.0)
                     self.pet.opacity = self.pet.pet_opacity
-        except Exception as e:
-            print(f"恢复窗口位置失败: {e}")
-
-    def on_exit(self):
-        """应用退出时的回调"""
-        self.on_stop()
+        except Exception:
+            pass
 
 
 # ==================== 应用入口 ====================
