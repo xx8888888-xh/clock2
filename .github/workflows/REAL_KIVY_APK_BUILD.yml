@@ -2,8 +2,13 @@ name: REAL Kivy APK Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, kivy-simple ]
   workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build'
+        required: false
+        default: 'main'
 
 jobs:
   build:
@@ -14,13 +19,14 @@ jobs:
       uses: actions/checkout@v4
       with:
         fetch-depth: 1
+        ref: ${{ github.event.inputs.branch || github.ref }}
 
     - name: Verify project structure
       run: |
         echo "=== 项目文件检查 ==="
         ls -la
         echo ""
-        echo "main.py 行数: $(wc -l < main.py)"
+        echo "main.py: $(wc -l < main.py 2>/dev/null || echo '缺失')"
         echo "buildozer.spec: $(test -f buildozer.spec && echo '存在' || echo '缺失')"
 
     - name: Set up Python 3.11
