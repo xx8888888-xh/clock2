@@ -184,7 +184,7 @@ class PetMoodSystem:
                 return True
         except Exception as e:
             print(f"加载宠物状态失败: {e}")
-        return False
+        return 'normal'  # 默认返回 normal
     
     def reset_state(self):
         """重置宠物状态到默认"""

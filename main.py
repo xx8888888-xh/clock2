@@ -319,7 +319,8 @@ class CutePet(Widget):
         self.load_settings()
         
         # 加载宠物持久化状态（新功能）
-        self.mood_system.load_state()
+        loaded_mood = self.mood_system.load_state()
+        self.current_mood = loaded_mood  # 同步当前心情状态
         
         self.draw_cute_pet()
         Clock.schedule_once(lambda dt: self.start_cute_idle(), 0.5)
@@ -2146,6 +2147,7 @@ class DesktopPetAlarmApp(App):
             weather_impact = weather_data.get('impact', 'normal') if weather_data else 'normal'
             next_event = self.pet.calendar.get_next_event()
             
+            old_mood = self.pet.current_mood  # 保存旧心情用于比较
             new_mood = self.pet.mood_system.get_current_mood(current_time, weather_impact, next_event)
             self.pet.current_mood = new_mood
             
@@ -2165,13 +2167,8 @@ class DesktopPetAlarmApp(App):
                 self.mood_label.text = f"心情: {new_mood} {mood_emoji}"
                 self.mood_label.color = self.pet.mood_system.get_mood_color(new_mood)
             
-            # 每5分钟保存一次宠物状态（避免频繁写入）
-            if not hasattr(self, '_mood_save_counter'):
-                self._mood_save_counter = 0
-            self._mood_save_counter += 1
-            if self._mood_save_counter >= 10:  # 每10次调用（约5分钟）保存一次
+            if new_mood != old_mood:
                 self.pet.mood_system.save_state()
-                self._mood_save_counter = 0
 
     def update_weather_status(self, dt):
         if self.pet:
