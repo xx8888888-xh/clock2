@@ -173,10 +173,10 @@ class PetMoodSystem:
                     state.get('last_interaction_time', datetime.datetime.now().isoformat())
                 )
                 self.interaction_count = state.get('interaction_count', 0)
-                return True
+                return self.current_mood  # 返回加载的心情状态
         except Exception as e:
             print(f"加载宠物状态失败: {e}")
-        return False
+        return 'normal'  # 默认返回 normal
     
     def reset_state(self):
         """重置宠物状态到默认"""
