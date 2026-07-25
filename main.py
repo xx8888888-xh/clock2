@@ -310,7 +310,7 @@ class CutePet(Widget):
         self.calendar_update_event = None
         
         # 定时更新心情、天气、日历
-        self.mood_update_event = Clock.schedule_interval(self.update_mood_status, 30)  # 每30秒更新心情
+        self.mood_update_event = Clock.schedule_interval(self.update_mood_status, 30)  # 每30秒更新心情显示
         self.weather_update_event = Clock.schedule_interval(self.update_weather_status, 1800)  # 每30分钟更新天气
         self.calendar_update_event = Clock.schedule_interval(self.update_calendar_status, 600)  # 每10分钟更新日历
         
@@ -1777,13 +1777,19 @@ class SettingsDialog(CutePopup):
         self.app.alarm_manager.save_settings()
     
     def on_city_change(self, instance):
-        """天气城市变更处理"""
+        """天气城市变更处理（带验证）"""
         new_city = instance.text.strip()
-        if new_city:
+        if new_city and len(new_city) >= 2:
             self.app.weather_city = new_city
             self.app.save_settings()
             # 立即更新天气显示
             self.app.update_weather_status(0)
+            # 提示用户保存成功
+            print(f"天气城市已更新为: {new_city}")
+        else:
+            # 恢复原城市名
+            instance.text = self.app.weather_city
+            print("城市名无效，已恢复原设置")
     
     def reset_settings(self, instance):
         self.size_slider.value = 160
@@ -1822,7 +1828,11 @@ class AlarmTriggerDialog(CutePopup):
         snooze_btn = CuteButton(
             text=f'😴 贪睡 ({snooze_count}/{max_snooze})'
         )
-        snooze_btn.background_color = CUTE_COLORS['accent']
+        # 贪睡次数已满时，按钮变红提醒用户
+        if snooze_count >= max_snooze:
+            snooze_btn.background_color = CUTE_COLORS['error']
+        else:
+            snooze_btn.background_color = CUTE_COLORS['accent']
         snooze_btn.bind(on_press=self.snooze_alarm)
         button_layout.add_widget(snooze_btn)
         
@@ -1839,7 +1849,7 @@ class AlarmTriggerDialog(CutePopup):
             self.dismiss()
             self.app.show_notification(f"😴 贪睡 {minutes} 分钟后再次提醒")
         else:
-            instance.text = '⚠️ 已达上限'
+            instance.text = '⚠️ 已达贪睡上限！'
     
     def close_alarm(self, instance):
         self.app.alarm_manager.stop_alarm(self.alarm['id'])
@@ -2155,8 +2165,13 @@ class DesktopPetAlarmApp(App):
                 self.mood_label.text = f"心情: {new_mood} {mood_emoji}"
                 self.mood_label.color = self.pet.mood_system.get_mood_color(new_mood)
             
-            # 每5分钟保存一次宠物状态
-            self.pet.mood_system.save_state()
+            # 每5分钟保存一次宠物状态（避免频繁写入）
+            if not hasattr(self, '_mood_save_counter'):
+                self._mood_save_counter = 0
+            self._mood_save_counter += 1
+            if self._mood_save_counter >= 10:  # 每10次调用（约5分钟）保存一次
+                self.pet.mood_system.save_state()
+                self._mood_save_counter = 0
 
     def update_weather_status(self, dt):
         if self.pet:

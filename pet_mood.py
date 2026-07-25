@@ -173,6 +173,14 @@ class PetMoodSystem:
                     state.get('last_interaction_time', datetime.datetime.now().isoformat())
                 )
                 self.interaction_count = state.get('interaction_count', 0)
+                # 修复：同时更新 Pet 对象的 current_mood 以保持一致
+                try:
+                    from kivy.app import App
+                    app = App.get_running_app()
+                    if app and hasattr(app, 'pet'):
+                        app.pet.current_mood = self.current_mood
+                except Exception:
+                    pass
                 return True
         except Exception as e:
             print(f"加载宠物状态失败: {e}")
