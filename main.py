@@ -247,10 +247,10 @@ class CutePet(Widget):
         self.current_weather = None
         self.next_calendar_event = None
         
-        # 定时更新心情、天气、日历
-        Clock.schedule_interval(self.update_mood_status, 30)  # 每30秒更新心情
-        Clock.schedule_interval(self.update_weather_status, 1800)  # 每30分钟更新天气
-        Clock.schedule_interval(self.update_calendar_status, 600)  # 每10分钟更新日历
+        # 定时更新心情、天气、日历 - 保存定时器引用以便 cleanup
+        self.mood_update_event = Clock.schedule_interval(self.update_mood_status, 30)  # 每30秒更新心情
+        self.weather_update_event = Clock.schedule_interval(self.update_weather_status, 1800)  # 每30分钟更新天气
+        self.calendar_update_event = Clock.schedule_interval(self.update_calendar_status, 600)  # 每10分钟更新日历
         
         self.draw_cute_pet()
         Clock.schedule_once(lambda dt: self.start_cute_idle(), 0.5)
