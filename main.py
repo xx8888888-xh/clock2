@@ -901,11 +901,17 @@ class AlarmClock:
             self.alarm_check_event = None
         
         app = App.get_running_app()
-        if app and next_alarm_time:
-            seconds_until_check = max(1, min(60, (next_alarm_time - now).total_seconds()))
-            self.alarm_check_event = Clock.schedule_once(
+        # 修复Bug：改为每60秒轮询检查所有闹钟
+        # 旧逻辑只调度到下一个闹钟时间，如果app在那之前被Android杀死，闹钟永远不会触发
+        # 新逻辑确保即使app被杀死重启，每次启动时 schedule_next_alarm 也会重新建立60秒轮询
+        if app:
+            # 取消旧的调度
+            if self.alarm_check_event:
+                self.alarm_check_event.cancel()
+            # 建立稳定的60秒轮询
+            self.alarm_check_event = Clock.schedule_interval(
                 lambda dt: self.check_alarms(),
-                seconds_until_check
+                60.0  # 每60秒检查一次所有闹钟
             )
     
     def check_alarms(self):
@@ -1947,6 +1953,10 @@ class DesktopPetAlarmApp(App):
         self.load_settings()
         
         self.sleep_check_event = Clock.schedule_interval(self.check_pet_sleep_state, 60)
+        
+        # 修复Bug：启动时立即检查是否有需要触发的闹钟
+        # 如果用户设置了在当前时间之后的闹钟但app刚被杀死重启，立即触发
+        Clock.schedule_once(lambda dt: self.alarm_manager.check_alarms(), 1)
         
         # 添加心情、天气、日历显示标签
         self.add_mood_weather_calendar_labels()
