@@ -1021,19 +1021,24 @@ class TimerManager:
         self.timer_check_event = Clock.schedule_interval(self.check_timers, 1)
     
     def check_timers(self, dt):
-        for timer in self.timers[:]:
+        triggered_timers = []  # 先收集要触发的计时器，避免迭代中修改导致RuntimeError
+        for timer in self.timers[:]:  # 复制列表避免迭代中修改问题
             if timer['running'] and timer['remaining'] > 0:
                 timer['remaining'] -= 1
                 
                 if timer['remaining'] <= 0:
                     timer['running'] = False
-                    self.trigger_timer(timer)
+                    triggered_timers.append(timer)
+        
+        # 统一触发（触发回调中可能调用remove_timer修改self.timers）
+        for timer in triggered_timers:
+            self.trigger_timer(timer)
     
     def trigger_timer(self, timer):
         app = App.get_running_app()
         if app:
             app.trigger_timer_alarm(timer)
-        # 计时器触发后从列表移除
+        # 统一移除已完成的计时器
         self.timers = [t for t in self.timers if t['id'] != timer['id']]
     
     def get_active_timers(self):
@@ -1933,8 +1938,8 @@ class DesktopPetAlarmApp(App):
                 pass
         except Exception as e:
             print(f"窗口初始化失败: {e}")
-            from kivy.uix.widget import Widget
-            return Widget()
+            # 不再返回Widget导致root=None崩溃，抛出异常让Kivy处理
+            raise
 
         self.root = FloatLayout()
         
