@@ -316,12 +316,10 @@ class CutePet(Widget):
         self.weather_update_event = None
         self.calendar_update_event = None
 
-        # 宠物状态更新由 DesktopPetAlarmApp 的定时器统一管理
-        # CutePet 中不创建独立定时器，避免重复调度
-        # 相关定时器引用保留但初始化为 None，待 App 层统一创建
-        self.mood_update_event = None
-        self.weather_update_event = None
-        self.calendar_update_event = None
+        # 定时更新心情、天气、日历
+        self.mood_update_event = Clock.schedule_interval(self.update_mood_status, 30)  # 每30秒更新心情显示
+        self.weather_update_event = Clock.schedule_interval(self.update_weather_status, 1800)  # 每30分钟更新天气
+        self.calendar_update_event = Clock.schedule_interval(self.update_calendar_status, 600)  # 每10分钟更新日历
 
         # 天气城市配置(默认北京)
         self.weather_city = 'Beijing'
@@ -810,6 +808,8 @@ class AlarmClock:
                 content = ','.join(parts[2:])
 
                 if ':' in time_str:
+                    hour, minute = map(int, time_str.split(':'))
+                elif ':' in time_str:
                     hour, minute = map(int, time_str.split(':'))
                 else:
                     raise ValueError("时间格式错误")
@@ -1909,12 +1909,6 @@ class SettingsDialog(CutePopup):
         self.max_snooze_slider.value = 3
         self.vibrate_switch.active = True
         self.sound_switch.active = True
-        # 修复:重置天气城市和API Key
-        self.city_input.text = 'Beijing'
-        self.api_key_input.text = 'demo_key'
-        self.app.weather_city = 'Beijing'
-        self.app.weather_api_key = 'demo_key'
-        self.app.save_settings()
 
 
 class AlarmTriggerDialog(CutePopup):
@@ -2067,14 +2061,12 @@ class DesktopPetAlarmApp(App):
         # self.timer_manager.timer_check_event = Clock.schedule_interval(
         #     self.timer_manager.check_timers, 1
         # )
-        # TimerManager.__init__ 中已调用 start_checking() 建立每秒轮询
-        # 不需要也不应该在这里再次创建定时器
-        # 保留这个检查只是为了将来防御性保护（如果 start_checking 被修改跳过）
-        # 实际执行时条件永远为 False，避免重复调度
-        # if self.timer_manager.timer_check_event is None:
-        #     self.timer_manager.timer_check_event = Clock.schedule_interval(
-        #         self.timer_manager.check_timers, 1
-        #     )
+        # 修复:改为在 TimerManager.start_checking 之后启动一次
+        # 确保即使 start_checking 被跳过(如将来修改),也不会丢失调度
+        if self.timer_manager.timer_check_event is None:
+            self.timer_manager.timer_check_event = Clock.schedule_interval(
+                self.timer_manager.check_timers, 1
+            )
 
         self.sleep_check_event = Clock.schedule_interval(self.check_pet_sleep_state, 60)
 

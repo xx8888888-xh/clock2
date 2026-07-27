@@ -7,6 +7,6 @@ plyer>=2.1.0
 requests>=2.31.0
 Pillow>=9.0.0
 
-# 构建工具 (仅用于本地打包，APK内嵌无需安装)
-# cython==0.29.36
-# buildozer==1.6.0
+# 构建工具
+cython==0.29.36
+buildozer==1.6.0
