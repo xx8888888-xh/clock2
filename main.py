@@ -809,8 +809,6 @@ class AlarmClock:
 
                 if ':' in time_str:
                     hour, minute = map(int, time_str.split(':'))
-                elif ':' in time_str:
-                    hour, minute = map(int, time_str.split(':'))
                 else:
                     raise ValueError("时间格式错误")
 
