@@ -40,8 +40,9 @@ from pet_mood import PetMoodSystem
 from weather import WeatherAPI
 from calendar_integration import CalendarIntegration
 
-# 设置窗口透明背景
-Config.set('graphics', 'background_color', '0,0,0,0')
+# ⚠️ Config.set('graphics', ...) 在 Kivy 2.3+ 中已被废弃且在 App 构建前调用无效
+# Android 悬浮窗透明度已在 init_app_window() 中通过 Window.clearcolor 设置
+# Config.set('graphics', 'background_color', '0,0,0,0')
 
 
 # ==================== 跨平台资源路径辅助函数 ====================
@@ -1784,18 +1785,21 @@ class SettingsDialog(CutePopup):
         sound_layout.add_widget(self.sound_switch)
         layout.add_widget(sound_layout)
         
-        # 天气城市设置（新增）
-        city_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(10))
-        city_layout.add_widget(Label(text='🌤️ 天气城市:', size_hint_x=0.4, font_size=sp(14), color=CUTE_COLORS['text']))
+        # 天气城市设置（带确认按钮，修复用户不知道按Enter的体验问题）
+        city_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(5))
+        city_layout.add_widget(Label(text='🌤️ 城市:', size_hint_x=0.3, font_size=sp(14), color=CUTE_COLORS['text']))
         self.city_input = TextInput(
             text=self.app.weather_city,
             multiline=False,
-            size_hint_x=0.6,
+            size_hint_x=0.4,
             font_size=sp(14),
             background_color=CUTE_COLORS['background']
         )
         self.city_input.bind(on_text_validate=self.on_city_change)
         city_layout.add_widget(self.city_input)
+        city_confirm_btn = CuteButton(text='✅ 应用', size_hint_x=0.3, font_size=sp(13))
+        city_confirm_btn.bind(on_press=self.on_city_change)
+        city_layout.add_widget(city_confirm_btn)
         layout.add_widget(city_layout)
         
         button_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(15))
@@ -1839,8 +1843,8 @@ class SettingsDialog(CutePopup):
         self.app.alarm_manager.save_settings()
     
     def on_city_change(self, instance):
-        """天气城市变更处理（带验证）"""
-        new_city = instance.text.strip()
+        """天气城市变更处理（支持按钮和Enter两种触发方式）"""
+        new_city = self.city_input.text.strip()
         if new_city and len(new_city) >= 2:
             self.app.weather_city = new_city
             self.app.save_settings()  # 立即保存
@@ -1853,7 +1857,7 @@ class SettingsDialog(CutePopup):
             print(f"天气城市已更新为: {new_city}")
         else:
             # 恢复原城市名
-            instance.text = self.app.weather_city
+            self.city_input.text = self.app.weather_city
             print("城市名无效，已恢复原设置")
     
     def reset_settings(self, instance):
@@ -2009,6 +2013,12 @@ class DesktopPetAlarmApp(App):
         
         # 加载应用设置（必须在 add_mood_weather_calendar_labels 之前）
         self.load_settings()
+        
+        # ⚠️ 修复：TimerManager 初始化后立即启动定时器
+        # 之前遗漏了这行，导致倒计时功能在 Android 上完全不可用
+        self.timer_manager.timer_check_event = Clock.schedule_interval(
+            self.timer_manager.check_timers, 1
+        )
         
         self.sleep_check_event = Clock.schedule_interval(self.check_pet_sleep_state, 60)
         
