@@ -857,6 +857,10 @@ class AlarmClock:
                     alarm['content'] = content
                 if repeat_days is not None:
                     alarm['repeat_days'] = repeat_days
+                # 编辑闹钟时清除该闹钟的贪睡闹钟，防止时间已变更但贪睡闹钟仍用旧时间
+                if alarm_id in self.snooze_alarms:
+                    del self.snooze_alarms[alarm_id]
+                alarm['snooze_count'] = 0
                 break
         self.save_alarms()
         self.schedule_next_alarm()
@@ -981,7 +985,10 @@ class AlarmClock:
                 for alarm in triggered_alarms:
                     app.trigger_alarm(alarm)
         
-        self.schedule_next_alarm()
+        # 注意：不再调用 schedule_next_alarm()
+        # 因为定时器使用的是稳定的 60 秒轮询，不依赖 schedule_next_alarm
+        # 如果在 check_alarms 内部再次调用 schedule_next_alarm，会导致定时器叠加
+        # schedule_next_alarm 应该只在闹钟列表发生变更（增/删/改）时由外部调用
     
     def save_alarms(self):
         try:
@@ -1234,7 +1241,8 @@ class AlarmDialog(CutePopup):
                 )
             self.dismiss()
         except ValueError:
-            pass
+            # 静默失败用户体验差，改为提示（但由于是 Spinner 选择，理论上不会触发）
+            print("闹钟保存失败：时间格式错误")
     
     def delete_alarm(self, instance):
         if self.alarm_id is not None:
@@ -1320,6 +1328,7 @@ class TimerDialog(CutePopup):
         self.timer_manager = timer_manager
         self.title = '⏱️ 倒计时'
         self.size_hint = (0.85, 0.7)
+        self.update_timer_event = None  # 必须先初始化，避免 on_dismiss 时引用不存在
         
         layout = BoxLayout(orientation='vertical', padding=dp(20), spacing=dp(15))
         
@@ -1393,15 +1402,27 @@ class TimerDialog(CutePopup):
     
     def add_timer(self, instance):
         try:
-            minutes = int(self.minute_input.text or 0)
-            seconds = int(self.sec_input.text or 0)
-            label = self.label_input.text.strip() or '计时器'
+            minutes = int(self.minute_input.text.strip() or '0')
+            seconds = int(self.sec_input.text.strip() or '0')
             
-            if minutes > 0 or seconds > 0:
-                self.timer_manager.add_timer(minutes, seconds, label)
-                self.update_timer_list(0)
+            if minutes < 0 or seconds < 0:
+                self.minute_input.text = '0'
+                self.sec_input.text = '0'
+                return
+            
+            if minutes == 0 and seconds == 0:
+                return
+            
+            label = self.label_input.text.strip() or '计时器'
+            self.timer_manager.add_timer(minutes, seconds, label)
+            self.update_timer_list(0)
+            
+            # 清空输入框
+            self.minute_input.text = '5'
+            self.sec_input.text = '0'
         except ValueError:
-            pass
+            self.minute_input.text = '0'
+            self.sec_input.text = '0'
     
     def update_timer_list(self, dt):
         self.timer_list.clear_widgets()
@@ -1791,7 +1812,8 @@ class SettingsDialog(CutePopup):
         self.content = layout
     
     def on_size_change(self, instance, value):
-        self.app.pet.pet_size = value
+        self.app.pet.pet_size = int(value)
+        self.app.pet.size = (self.app.pet.pet_size, self.app.pet.pet_size)
     
     def on_opacity_change(self, instance, value):
         self.app.pet.pet_opacity = value
@@ -1821,7 +1843,10 @@ class SettingsDialog(CutePopup):
         new_city = instance.text.strip()
         if new_city and len(new_city) >= 2:
             self.app.weather_city = new_city
-            self.app.save_settings()
+            self.app.save_settings()  # 立即保存
+            # 同步到 Pet 对象的天气城市设置
+            if hasattr(self.app, 'pet'):
+                self.app.pet.weather_city = new_city
             # 立即更新天气显示
             self.app.update_weather_status(0)
             # 提示用户保存成功
@@ -2010,6 +2035,12 @@ class DesktopPetAlarmApp(App):
         except Exception as e:
             print(f"加载设置失败: {e}")
             self.weather_city = 'Beijing'
+        # 同步到 Pet 对象的天气城市设置，确保宠物系统使用一致的城市
+        try:
+            if self.pet:
+                self.pet.weather_city = self.weather_city
+        except Exception:
+            pass
     
     def save_settings(self):
         """保存应用设置"""
