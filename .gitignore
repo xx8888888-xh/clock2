@@ -21,3 +21,13 @@ venv/
 *.swp
 *.swo
 *~
+# 构建产物
+./.buildozer/
+./bin/
+*.apk
+*.aab
+*.keystore
+# 应用数据文件(包含用户个人数据)
+pet_state.json
+alarm_settings.json
+alarms_backup.json
