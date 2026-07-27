@@ -385,6 +385,10 @@ class CutePet(Widget):
             self.sleep_bubbles.append(bubble)
             self.add_widget(bubble)
 
+        # 🔥 修复Bug:draw_default_pet() 也需要创建气泡定时器
+        # 否则当没有 pet.png 图片时，睡眠气泡动画永远不会触发
+        self.bubble_timer = Clock.schedule_interval(self.spawn_sleep_bubble, 3)
+
     def update_pet(self, *args):
         if self.pet_body and self.shadow and self.highlight:
             self.shadow.pos = (self.x + dp(5), self.y - dp(5))
@@ -2091,6 +2095,26 @@ class DesktopPetAlarmApp(App):
         # 添加心情、天气、日历显示标签
         self.add_mood_weather_calendar_labels()
 
+        # 🔥 修复Bug:必须在 init_app_window 中创建定时器
+        # 否则首次启动后，悬浮窗内的心情/天气/日历状态标签永远不会更新
+        # on_resume 只在 Android 暂停恢复时触发，桌面模式不会触发
+        if self.pet:
+            # 取消旧的（防御性保护）
+            if self.pet.mood_update_event:
+                self.pet.mood_update_event.cancel()
+            if self.pet.weather_update_event:
+                self.pet.weather_update_event.cancel()
+            if self.pet.calendar_update_event:
+                self.pet.calendar_update_event.cancel()
+            # 立即执行一次初始化更新（让标签立即显示有意义的内容）
+            self.update_mood_status(0)
+            self.update_weather_status(0)
+            self.update_calendar_status(0)
+            # 创建定时器：心情30秒、天气10分钟、日历10分钟
+            self.pet.mood_update_event = Clock.schedule_interval(self.update_mood_status, 30)
+            self.pet.weather_update_event = Clock.schedule_interval(self.update_weather_status, 600)
+            self.pet.calendar_update_event = Clock.schedule_interval(self.update_calendar_status, 600)
+
 
 
 
@@ -2492,6 +2516,7 @@ class DesktopPetAlarmApp(App):
             pass
 
         # 恢复窗口位置 - 修复Bug:添加 self.pet 空值保护避免崩溃
+        # 修复Bug:日志输出让用户知道恢复是否成功
         try:
             config_path = get_config_path('window_pos.json')
             if os.path.exists(config_path):
@@ -2504,8 +2529,11 @@ class DesktopPetAlarmApp(App):
                     self.pet.pet_size = window_pos.get('pet_size', 160)
                     self.pet.pet_opacity = window_pos.get('pet_opacity', 1.0)
                     self.pet.opacity = self.pet.pet_opacity
-        except Exception:
-            pass
+                print(f"窗口位置已恢复: ({Window.left}, {Window.top})")
+            else:
+                print("未找到窗口位置配置，使用默认值")
+        except Exception as e:
+            print(f"⚠️ 恢复窗口位置失败: {e}，使用默认值")
 
 
 # 桌面模式默认背景色已在 init_app_window 中设置
