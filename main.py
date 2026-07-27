@@ -1335,6 +1335,7 @@ class TimerDialog(CutePopup):
         time_layout.add_widget(Label(text='⏱️ 分钟:', size_hint_x=0.3, font_size=sp(16), color=CUTE_COLORS['text']))
         self.minute_input = TextInput(
             text='5',
+            hint_text='分钟数',
             multiline=False,
             input_filter='int',
             size_hint_x=0.7,
@@ -1348,6 +1349,7 @@ class TimerDialog(CutePopup):
         sec_layout.add_widget(Label(text='⏱️ 秒:', size_hint_x=0.3, font_size=sp(16), color=CUTE_COLORS['text']))
         self.sec_input = TextInput(
             text='0',
+            hint_text='秒数',
             multiline=False,
             input_filter='int',
             size_hint_x=0.7,
@@ -2315,7 +2317,10 @@ class DesktopPetAlarmApp(App):
             # 更新天气显示
             if self.weather_label:
                 weather_info = self.pet.weather_api.get_weather_for_pet(self.weather_city)
-                self.weather_label.text = f"天气: {weather_info['description']} {weather_info['emoji']}"
+                # 判断是否为模拟数据
+                is_demo = self.app.weather_api_key == 'demo_key' or not self.app.weather_api_key
+                demo_tag = " [模拟]" if is_demo else ""
+                self.weather_label.text = f"天气: {weather_info['description']}{demo_tag} {weather_info['emoji']}"
                 self.weather_label.color = CUTE_COLORS['secondary']
 
     def update_calendar_status(self, dt):

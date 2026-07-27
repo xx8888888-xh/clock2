@@ -10,21 +10,31 @@ import datetime
 class WeatherAPI:
     """天气API类"""
     
-    def __init__(self, api_key=None):
+    def __init__(self, api_key=None, cache_minutes=5):
         self.api_key = api_key or 'demo_key'  # 默认使用模拟数据
         self.base_url = "https://api.openweathermap.org/data/2.5/weather"
         self.last_weather_data = None
         self.has_data = False
         self._last_update = None
+        self._cache_minutes = cache_minutes  # 缓存时间（防止 API 调用过快耗尽配额）
+        self._cached_result = None
+        self._cached_city = None
         
     def get_current_weather(self, city="Beijing"):
         """
-        获取当前天气信息
+        获取当前天气信息（带5分钟缓存）
         Args:
             city: 城市名称
         Returns:
             dict: 天气信息
         """
+        # 缓存检查：如果缓存未过期且城市相同，返回缓存数据
+        if (self._cached_result is not None and
+                self._cached_city == city and
+                self._last_update is not None and
+                (datetime.datetime.now() - self._last_update).total_seconds() < self._cache_minutes * 60):
+            return self._cached_result
+        
         try:
             # 如果API密钥是demo_key，使用模拟数据
             if self.api_key == 'demo_key':
@@ -55,6 +65,10 @@ class WeatherAPI:
                     'wind_speed': weather_data['wind'].get('speed', 0),
                     'impact': self._calculate_weather_impact(weather_data)
                 }
+                
+                # 保存到缓存
+                self._cached_result = weather_info
+                self._cached_city = city
                 
                 return weather_info
             else:
