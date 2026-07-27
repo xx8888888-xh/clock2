@@ -191,7 +191,7 @@ class PetMoodSystem:
             return self.current_mood  # 返回实际的 mood 字符串
         except Exception as e:
             print(f"加载宠物状态失败: {e}")
-        return None  # 失败时返回 None，调用方处理默认值
+        return self.current_mood  # 文件不存在或加载失败时返回默认值
     
     def reset_state(self):
         """重置宠物状态到默认"""

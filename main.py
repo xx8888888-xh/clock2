@@ -645,7 +645,6 @@ class CutePet(Widget):
         if self.bubble_timer:
             self.bubble_timer.cancel()
             self.bubble_timer = None
-            self.bubble_timer = None
         for bubble in self.sleep_bubbles:
             bubble.cleanup()
         # 取消定时器以防止内存泄漏
