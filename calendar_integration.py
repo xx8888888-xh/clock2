@@ -28,6 +28,9 @@ class CalendarIntegration:
         self.events = []
         self._update_timer = None
         self._load_events()
+        # 启动时清理过期事件，避免列表无限膨胀
+        # 注意：不在 _load_events 内部调用，避免双重清理
+        self.cleanup_old_events()
 
     def _load_events(self):
         """加载日历事件"""
@@ -50,11 +53,30 @@ class CalendarIntegration:
         try:
             calendar_path = get_calendar_path()
             # 确保目录存在
-            os.makedirs(os.path.dirname(calendar_path) if os.path.dirname(calendar_path) else '.', exist_ok=True)
+            calendar_dir = os.path.dirname(calendar_path)
+            if calendar_dir:
+                os.makedirs(calendar_dir, exist_ok=True)
             with open(calendar_path, 'w', encoding='utf-8') as f:
                 json.dump(self.events, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"保存日历事件失败: {e}")
+
+    def cleanup_old_events(self):
+        """清理过期事件（不保存，仅从内存移除）"""
+        now = datetime.datetime.now()
+        new_events = []
+        for event in self.events:
+            try:
+                event_datetime = datetime.datetime.strptime(
+                    f"{event.get('date', '')} {event.get('time', '')}", 
+                    "%Y-%m-%d %H:%M"
+                )
+                if event_datetime >= now:
+                    new_events.append(event)
+            except (KeyError, ValueError):
+                # 保留无法解析的事件
+                new_events.append(event)
+        self.events = new_events
 
     def _create_sample_events(self):
         """创建示例日历事件 - 使用动态日期"""
@@ -106,8 +128,10 @@ class CalendarIntegration:
         return events
 
     def get_next_event(self):
-        """获取下一个即将到来的日历事件"""
+        """获取下一个即将到来的日历事件（返回最近的一个）"""
         now = datetime.datetime.now()
+        next_event = None
+        next_datetime = None
 
         for event in self.events:
             try:
@@ -115,19 +139,16 @@ class CalendarIntegration:
                     f"{event.get('date', '')} {event.get('time', '')}", 
                     "%Y-%m-%d %H:%M"
                 )
-
-                # 如果是今天的事件且在当前时间之后
-                if event_datetime.date() == now.date() and event_datetime > now:
-                    return event
-                
-                # 如果是未来事件
+                # 只考虑未来事件
                 if event_datetime > now:
-                    return event
+                    if next_datetime is None or event_datetime < next_datetime:
+                        next_datetime = event_datetime
+                        next_event = event
             except (KeyError, ValueError) as e:
                 print(f"解析事件日期失败: {e}")
                 continue
 
-        return None
+        return next_event
 
     def get_today_events(self):
         """获取今天的所有事件"""
