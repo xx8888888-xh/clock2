@@ -26,6 +26,7 @@ class CalendarIntegration:
 
     def __init__(self):
         self.events = []
+        self._update_timer = None
         self._load_events()
 
     def _load_events(self):
@@ -245,3 +246,13 @@ class CalendarIntegration:
         ))
         
         return upcoming
+    
+    def cleanup(self):
+        """清理资源，防止内存泄漏"""
+        # 取消定时器
+        if self._update_timer:
+            self._update_timer.cancel()
+            self._update_timer = None
+        
+        # 清空事件列表
+        self.events = []
