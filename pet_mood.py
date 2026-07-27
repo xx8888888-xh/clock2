@@ -139,6 +139,15 @@ class PetMoodSystem:
             else:
                 config_path = 'pet_state.json'
             
+            # 修复Bug：同步 Pet.current_mood 到心情系统的 current_mood
+            # 确保保存的是最新的心情值
+            try:
+                app = App.get_running_app()
+                if app and hasattr(app, 'pet') and hasattr(app.pet, 'current_mood'):
+                    self.current_mood = app.pet.current_mood
+            except Exception:
+                pass
+            
             state = {
                 'current_mood': self.current_mood,
                 'last_interaction_time': self.last_interaction_time.isoformat(),
