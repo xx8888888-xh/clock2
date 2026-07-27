@@ -2078,6 +2078,9 @@ class DesktopPetAlarmApp(App):
         dialog.open()
     
     def check_pet_sleep_state(self, dt):
+        # 修复Bug：self.pet 可能为 None（极端时序/初始化异常）
+        if self.pet is None:
+            return
         now = datetime.now()
         hour = now.hour
         
@@ -2382,7 +2385,7 @@ class DesktopPetAlarmApp(App):
         gc.collect()
     
     def on_start(self):
-        """Android应用启动"""
+        """Android应用启动 - 恢复窗口位置和宠物状态"""
         try:
             from kivy.utils import platform
             if platform == "android":
@@ -2392,13 +2395,15 @@ class DesktopPetAlarmApp(App):
                 except Exception:
                     pass
 
+                # 修复Bug：只在 root 尚未初始化时补初始化
+                # 避免 build() 中 schedule_once 和 on_start 重复调用导致重复 pet 创建
                 if self.root is None:
                     from kivy.clock import Clock
                     Clock.schedule_once(lambda dt: self.init_app_window(), 0.5)
         except Exception:
             pass
         
-        # 恢复窗口位置
+        # 恢复窗口位置 - 修复Bug：添加 self.pet 空值保护避免崩溃
         try:
             config_path = get_config_path('window_pos.json')
             if os.path.exists(config_path):
@@ -2406,7 +2411,8 @@ class DesktopPetAlarmApp(App):
                     window_pos = json.load(f)
                 Window.left = window_pos.get('left', 100)
                 Window.top = window_pos.get('top', 500)
-                if self.pet:
+                # 修复Bug：self.pet 可能为 None（极端时序），增加保护
+                if self.pet is not None:
                     self.pet.pet_size = window_pos.get('pet_size', 160)
                     self.pet.pet_opacity = window_pos.get('pet_opacity', 1.0)
                     self.pet.opacity = self.pet.pet_opacity
