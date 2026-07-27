@@ -108,6 +108,48 @@ jobs:
           fi
         fi
 
+    - name: Create BootReceiver for Android boot wake-up
+      run: |
+        mkdir -p android/src/org/petalarm
+        
+        # Python package placeholder (prevents python files from being treated as Android source)
+        echo "# Android package" > android/src/org/petalarm/__init__.py
+        
+        # BootReceiver.java - auto-starts app after device boot
+        cat > android/src/org/petalarm/BootReceiver.java << 'JAVA_SRC'
+package org.petalarm;
+
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.util.Log;
+
+public class BootReceiver extends BroadcastReceiver {
+    private static final String TAG = "PetAlarm BootReceiver";
+    
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        if (intent == null || intent.getAction() == null) return;
+        if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
+            Log.i(TAG, "Boot completed, starting Pet Alarm app");
+            try {
+                Intent launchIntent = context.getPackageManager()
+                    .getLaunchIntentForPackage(context.getPackageName());
+                if (launchIntent != null) {
+                    launchIntent.addFlags(
+                        Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    );
+                    context.startActivity(launchIntent);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to start app: " + e.getMessage());
+            }
+        }
+    }
+}
+JAVA_SRC
+        echo "✅ BootReceiver.java created"
+
     - name: Build APK with buildozer
       env:
         BUILDOZER_WARN_ON_ROOT: '0'

@@ -28,7 +28,7 @@ ALARM_SOUND_PATHS = [
 # 应用配置
 APP_CONFIG = {
     'app_name': '宠物闹钟',
-    'version': '1.0.0',
+    'version': '3.5.0',
     'author': 'Pet Alarm Team',
     'description': '一个可爱的桌面宠物闹钟应用',
     'website': 'https://github.com/petalarm',
@@ -82,7 +82,7 @@ TEST_ALARMS = [
         'enabled': True
     },
     {
-        'id': 2,
+        'id': 3,
         'hour': 18,
         'minute': 0,
         'label': '下班',
@@ -91,7 +91,7 @@ TEST_ALARMS = [
         'enabled': True
     },
     {
-        'id': 3,
+        'id': 4,
         'hour': 22,
         'minute': 30,
         'label': '睡觉',
