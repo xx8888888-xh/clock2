@@ -280,6 +280,14 @@ class CutePet(Widget):
         super().__init__(**kwargs)
         self.size_hint = (None, None)
         self.size = (self.pet_size, self.pet_size)
+        # 宠物在悬浮窗内的相对位置（用于拖拽）
+        self._pet_offset_x = 0
+        self._pet_offset_y = 0
+        # 拖拽时记录起点
+        self._drag_touch_start_x = 0
+        self._drag_touch_start_y = 0
+        self._drag_pet_start_x = 0
+        self._drag_pet_start_y = 0
         
         self.pet_image = None
         self.pet_body = None
@@ -293,8 +301,6 @@ class CutePet(Widget):
         self.touch_start_time = 0
         self.last_click_time = 0
         self.click_count = 0
-        self.drag_offset_x = 0
-        self.drag_offset_y = 0
         
         # 新增功能系统
         self.mood_system = PetMoodSystem()
@@ -409,18 +415,22 @@ class CutePet(Widget):
     def start_cute_idle(self):
         self.cancel_current_animation()
         self.is_excited = False
+        # 立即捕获当前位置作为动画基准（避免 self.y 在动画过程中变化导致跳跃）
         base_y = self.y
+        base_x = self.x
         
         def create_idle_animation():
             if self.is_excited or self.is_sleeping:
                 return
+            # 再次获取当前位置确保同步
+            current_y = self.y
             
             breathe_in = Animation(scale=1.05, duration=1.2, t='in_out_sine')
             breathe_out = Animation(scale=1.0, duration=1.2, t='in_out_sine')
             sway_left = Animation(rotation=-3, duration=1.2, t='in_out_sine')
             sway_right = Animation(rotation=3, duration=1.2, t='in_out_sine')
-            float_up = Animation(y=base_y + dp(8), duration=1.5, t='in_out_sine')
-            float_down = Animation(y=base_y, duration=1.5, t='in_out_sine')
+            float_up = Animation(y=current_y + dp(8), duration=1.5, t='in_out_sine')
+            float_down = Animation(y=current_y, duration=1.5, t='in_out_sine')
             
             anim = (breathe_in & sway_left & float_up) + (breathe_out & sway_right & float_down)
             anim.repeat = True
@@ -432,11 +442,14 @@ class CutePet(Widget):
     def start_sleep_animation(self):
         self.cancel_current_animation()
         self.is_sleeping = True
+        # 立即捕获当前位置作为动画基准
+        base_y = self.y
         
         anim = Animation(scale=0.85, opacity=0.6, rotation=0, duration=1, t='out_quad')
         
         def start_breathing(*args):
             if self.is_sleeping:
+                current_y = self.y  # 重新获取当前位置
                 breathe_in = Animation(opacity=0.5, scale=0.83, duration=2, t='in_out_sine')
                 breathe_out = Animation(opacity=0.7, scale=0.87, duration=2, t='in_out_sine')
                 anim = breathe_in + breathe_out
@@ -451,6 +464,7 @@ class CutePet(Widget):
     def wake_up_animation(self):
         self.cancel_current_animation()
         self.is_sleeping = False
+        # 立即捕获当前位置作为动画基准
         base_y = self.y
         
         anim1 = Animation(scale=1.2, rotation=10, opacity=1, duration=0.15, t='out_quad')
@@ -466,9 +480,12 @@ class CutePet(Widget):
         anim.start(self)
     
     def excited_animation(self):
+        """宠物兴奋时的动画 - 快速摇摆和跳跃"""
         self.cancel_current_animation()
         self.is_excited = True
+        # 使用宠物自身位置基准（而非窗口位置）
         base_y = self.y
+        base_x = self.x
         
         seq = None
         for i in range(5):
@@ -503,33 +520,35 @@ class CutePet(Widget):
     def on_touch_down(self, touch):
         if self.collide_point(*touch.pos):
             self.is_dragging = True
-            self.drag_start_pos = touch.pos
             self.touch_start_time = time.time()
-            self.drag_offset_x = Window.left
-            self.drag_offset_y = Window.top
+            self._drag_touch_start_x = touch.x
+            self._drag_touch_start_y = touch.y
+            self._drag_pet_start_x = self.x
+            self._drag_pet_start_y = self.y
             self.cute_click_animation()
             return True
         return super().on_touch_down(touch)
     
     def on_touch_move(self, touch):
         if self.is_dragging:
-            dx = touch.x - self.drag_start_pos[0]
-            dy = touch.y - self.drag_start_pos[1]
+            dx = touch.x - self._drag_touch_start_x
+            dy = touch.y - self._drag_touch_start_y
             
-            new_left = self.drag_offset_x + int(dx)
-            new_top = self.drag_offset_y + int(dy)
+            new_x = self._drag_pet_start_x + dx
+            new_y = self._drag_pet_start_y + dy
             
+            # 限制在合理范围内（防止拖出屏幕太远）
+            from kivy.core.window import Window
             screen_w = Window.width if Window.width > 0 else 1920
             screen_h = Window.height if Window.height > 0 else 1080
-            
             pet_size = int(self.pet_size)
-            margin = 50
+            margin = 20
             
-            new_left = max(-margin, min(new_left, screen_w - pet_size + margin))
-            new_top = max(-margin, min(new_top, screen_h - pet_size + margin))
+            new_x = max(-margin, min(new_x, screen_w - pet_size + margin))
+            new_y = max(-margin, min(new_y, screen_h - pet_size + margin))
             
-            Window.left = new_left
-            Window.top = new_top
+            # 直接移动宠物部件位置（在FloatLayout内自由移动）
+            self.pos = (new_x, new_y)
             
             return True
         return super().on_touch_move(touch)
@@ -539,8 +558,12 @@ class CutePet(Widget):
             self.is_dragging = False
             
             touch_duration = time.time() - self.touch_start_time
-            dx = abs(touch.x - self.drag_start_pos[0])
-            dy = abs(touch.y - self.drag_start_pos[1])
+            dx = abs(touch.x - self._drag_touch_start_x)
+            dy = abs(touch.y - self._drag_touch_start_y)
+            
+            # 保存拖拽结束后的位置
+            self._pet_offset_x = self.x
+            self._pet_offset_y = self.y
             
             if dx < 10 and dy < 10 and touch_duration < 0.4:
                 self.handle_click()
@@ -628,6 +651,7 @@ class CutePet(Widget):
 
     def start_happy_animation(self):
         self.cancel_current_animation()
+        # 使用宠物自身位置基准
         base_y = self.y
         
         # 快乐的摇摆动画
@@ -644,6 +668,7 @@ class CutePet(Widget):
     def start_sleepy_animation(self):
         self.cancel_current_animation()
         self.is_sleeping = True
+        # 使用宠物自身位置基准
         base_y = self.y
         
         # 困倦的缓慢移动
@@ -658,8 +683,10 @@ class CutePet(Widget):
         anim.start(self)
 
     def start_excited_animation(self):
+        """宠物兴奋动画 - 与 excited_animation 相同，但基于自身位置"""
         self.cancel_current_animation()
         self.is_excited = True
+        # 使用宠物自身位置基准（而非窗口位置）
         base_y = self.y
         
         # 兴奋的快速旋转和跳动
@@ -688,6 +715,7 @@ class CutePet(Widget):
 
     def start_angry_animation(self):
         self.cancel_current_animation()
+        # 使用宠物自身位置基准
         base_y = self.y
         
         # 生气的小幅度抖动
@@ -2355,8 +2383,6 @@ class DesktopPetAlarmApp(App):
             pass
 
 
-# ==================== 应用入口 ====================
+# 桌面模式默认背景色已在 init_app_window 中设置
 if __name__ == '__main__':
-    from kivy.core.window import Window
-    Window.clearcolor = (1, 0.96, 0.94, 1)  # 柔和背景色
     DesktopPetAlarmApp().run()
