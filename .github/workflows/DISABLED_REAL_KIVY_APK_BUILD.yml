@@ -2,7 +2,7 @@ name: REAL Kivy APK Build
 
 on:
   push:
-    branches: [ main, kivy-simple ]
+    branches: [__workflow_disabled__]
   workflow_dispatch:
     inputs:
       branch:

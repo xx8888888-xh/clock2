@@ -12,7 +12,7 @@ name: Build Android APK (Fixed)
 
 on:
   push:
-    branches: [main, master, kivy-simple]
+    branches: [__workflow_disabled__]
   workflow_dispatch:
 
 env:

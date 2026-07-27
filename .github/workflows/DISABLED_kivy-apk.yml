@@ -2,7 +2,7 @@ name: Kivy APK Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [__workflow_disabled__]
   workflow_dispatch:
 
 jobs:
