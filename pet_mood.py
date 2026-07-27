@@ -86,17 +86,21 @@ class PetMoodSystem:
         # 5. 随机因素（减小权重，避免过度随机）
         mood_score += random.randint(-2, 2)
         
-        # 确定最终心情
+        # 确定最终心情并同步到内部状态（修复Bug：之前只返回不保存）
         if mood_score >= 20:
-            return 'excited'
+            final_mood = 'excited'
         elif mood_score >= 10:
-            return 'happy'
+            final_mood = 'happy'
         elif mood_score >= 0:
-            return 'normal'
+            final_mood = 'normal'
         elif mood_score >= -10:
-            return 'sleepy'
+            final_mood = 'sleepy'
         else:
-            return 'angry'
+            final_mood = 'angry'
+
+        # 同步心情到内部状态，供 save_state/load_state 使用
+        self.current_mood = final_mood
+        return final_mood
     
     def update_interaction(self):
         """记录互动，提升心情"""
@@ -216,3 +220,4 @@ class PetMoodSystem:
         self.current_mood = 'normal'
         self.last_interaction_time = datetime.datetime.now()
         self.interaction_count = 0
+
