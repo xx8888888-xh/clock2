@@ -131,7 +131,6 @@ class PetMoodSystem:
     
     def save_state(self):
         """保存宠物状态到文件（持久化）"""
-        import os
         try:
             from kivy.app import App
             app = App.get_running_app()
@@ -155,7 +154,6 @@ class PetMoodSystem:
     
     def load_state(self):
         """从文件加载宠物状态"""
-        import os
         try:
             from kivy.app import App
             app = App.get_running_app()
@@ -202,3 +200,10 @@ class PetMoodSystem:
             'angry': '有点生气，需要安抚'
         }
         return description_map.get(mood, '心情正常')
+    
+    def cleanup(self):
+        """清理资源，防止内存泄漏"""
+        # 重置状态
+        self.current_mood = 'normal'
+        self.last_interaction_time = datetime.datetime.now()
+        self.interaction_count = 0
