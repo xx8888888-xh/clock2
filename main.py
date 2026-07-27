@@ -325,15 +325,19 @@ class CutePet(Widget):
 
         # 天气城市配置(默认北京)
         self.weather_city = 'Beijing'
+        
+        # bubble_timer 将在 draw_cute_pet 末尾创建，此处不提前调度
+        # 修复Bug：避免 bubble_timer 双重调度
+        
         self.load_settings()
 
         # 加载宠物持久化状态(新功能)
         loaded_mood = self.mood_system.load_state()
-        self.current_mood = loaded_mood  # 同步当前心情状态
+        self.current_mood = loaded_mood if loaded_mood else 'normal'  # 同步当前心情状态
 
         self.draw_cute_pet()
         Clock.schedule_once(lambda dt: self.start_cute_idle(), 0.5)
-        self.bubble_timer = Clock.schedule_interval(self.spawn_sleep_bubble, 3)
+        # bubble_timer 在 draw_cute_pet 末尾调度（避免双重调度）
 
     def draw_cute_pet(self):
         image_files = ['pet.png', 'pet_default.png', 'assets/pet.png']
@@ -348,6 +352,8 @@ class CutePet(Widget):
                     keep_ratio=True
                 )
                 self.add_widget(self.pet_image)
+                # bubble_timer 在图片加载成功后才调度（避免重复调度）
+                self.bubble_timer = Clock.schedule_interval(self.spawn_sleep_bubble, 3)
                 return
 
         self.draw_default_pet()
@@ -638,6 +644,7 @@ class CutePet(Widget):
         self.cancel_current_animation()
         if self.bubble_timer:
             self.bubble_timer.cancel()
+            self.bubble_timer = None
             self.bubble_timer = None
         for bubble in self.sleep_bubbles:
             bubble.cleanup()
@@ -2367,6 +2374,10 @@ class DesktopPetAlarmApp(App):
                 if self.pet.calendar_update_event:
                     self.pet.calendar_update_event.cancel()
                     self.pet.calendar_update_event = None
+                # 暂停气泡动画定时器（节省后台资源）
+                if self.pet.bubble_timer:
+                    self.pet.bubble_timer.cancel()
+                    self.pet.bubble_timer = None
 
             # 保存闹钟状态
             if self.alarm_manager:
@@ -2413,6 +2424,10 @@ class DesktopPetAlarmApp(App):
                 self.pet.mood_update_event = Clock.schedule_interval(self.update_mood_status, 30)
                 self.pet.weather_update_event = Clock.schedule_interval(self.update_weather_status, 1800)
                 self.pet.calendar_update_event = Clock.schedule_interval(self.update_calendar_status, 600)
+                # 恢复气泡动画定时器
+                if self.pet.bubble_timer:
+                    self.pet.bubble_timer.cancel()
+                self.pet.bubble_timer = Clock.schedule_interval(self.pet.spawn_sleep_bubble, 3)
 
             if self.alarm_manager:
                 self.alarm_manager.schedule_next_alarm()
@@ -2422,6 +2437,10 @@ class DesktopPetAlarmApp(App):
             print(f"恢复时出错: {e}")
 
     def on_stop(self):
+        # 修复Bug：保存宠物心情状态，避免用户互动数据丢失
+        if self.pet and hasattr(self.pet, 'mood_system'):
+            self.pet.mood_system.save_state()
+
         if self.alarm_manager:
             self.alarm_manager.save_alarms()
             self.alarm_manager.save_settings()
