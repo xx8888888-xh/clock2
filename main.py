@@ -118,6 +118,7 @@ CUTE_COLORS = {
     'shadow': (0, 0, 0, 0.15),
     'success': (0.3, 0.8, 0.3, 1),
     'error': (1, 0.3, 0.3, 1),
+    'warning': (1.0, 0.7, 0.1, 1),
 }
 
 # 默认配置
@@ -2299,6 +2300,9 @@ class DesktopPetAlarmApp(App):
 
         self.play_alarm_sound()
         self.vibrate()
+
+        # 5秒后自动停止声音，避免计时器声音持续播放
+        Clock.schedule_once(lambda dt: self.stop_alarm_sound(), 5)
 
         try:
             notification.notify(
