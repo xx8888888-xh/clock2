@@ -104,8 +104,8 @@ weather_api = WeatherAPI(api_key='your_openweathermap_key')
 
 ## 版本历史
 
-- **V3.6**: 修复SettingsDialog无ScrollView导致小屏溢出、城市名无校验、模拟天气无UI提示、日历功能文档误导用户
-- **V3.4**: 宠物状态持久化、应用内城市设置、on_resume回调修复
+- **V3.6.1**: 修复SettingsDialog无ScrollView导致小屏溢出、城市名无校验（空/过短/纯数字拒绝）、模拟天气无UI提示、日历功能文档误导用户
+- **V3.6**: 宠物状态持久化、应用内城市设置、on_resume回调修复
 - V3.3: 修复on_resume天气定时器、window_pos路径、添加on_exit
 - V3.2: 修复悬浮窗初始化时序问题
 - V3.1: 完善心情/天气/日历系统，增加定时器清理

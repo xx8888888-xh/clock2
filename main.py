@@ -2218,6 +2218,10 @@ class DesktopPetAlarmApp(App):
         try:
             if self.pet:
                 self.pet.weather_city = self.weather_city
+                # 🔥 修复:同时同步 weather_api_key 到 WeatherAPI 对象
+                # 否则重启后 weather_api 仍使用默认的 demo_key
+                if hasattr(self.pet, 'weather_api') and self.weather_api_key:
+                    self.pet.weather_api.api_key = self.weather_api_key
         except Exception:
             pass
 
