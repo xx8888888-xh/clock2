@@ -1,9 +1,10 @@
 """
-安卓桌面宠物闹钟 - 完全修复版 V3.6
+安卓桌面宠物闹钟 - 完全修复版 V3.6.1
 修复内存泄漏、定时器清理和状态持久化问题
 修复非重复闹钟重复触发bug（添加触发标记）
 修复睡眠动画被心情系统覆盖bug
 修复窗口大小和标签布局问题
+V3.6.1: 修复SettingsDialog无ScrollView、城市名无校验、模拟天气无UI提示、日历文档误导
 """
 
 import os
@@ -1747,7 +1748,10 @@ class SettingsDialog(CutePopup):
         self.title = '⚙️ 设置'
         self.size_hint = (0.9, 0.8)
 
-        layout = BoxLayout(orientation='vertical', padding=dp(20), spacing=dp(12))
+        # 设置内容区域（使用ScrollView包装，确保小屏设备不溢出）
+        settings_scroll = ScrollView(size_hint_y=0.88, do_scroll_x=False)
+        settings_content = BoxLayout(orientation='vertical', padding=dp(20), spacing=dp(12), size_hint_y=None)
+        settings_content.bind(minimum_height=settings_content.setter('height'))
 
         size_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(10))
         size_layout.add_widget(Label(text='🐾 宠物大小:', size_hint_x=0.4, font_size=sp(14), color=CUTE_COLORS['text']))
@@ -1759,7 +1763,7 @@ class SettingsDialog(CutePopup):
         )
         self.size_slider.bind(value=self.on_size_change)
         size_layout.add_widget(self.size_slider)
-        layout.add_widget(size_layout)
+        settings_content.add_widget(size_layout)
 
         opacity_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(10))
         opacity_layout.add_widget(Label(text='👻 透明度:', size_hint_x=0.4, font_size=sp(14), color=CUTE_COLORS['text']))
@@ -1771,7 +1775,7 @@ class SettingsDialog(CutePopup):
         )
         self.opacity_slider.bind(value=self.on_opacity_change)
         opacity_layout.add_widget(self.opacity_slider)
-        layout.add_widget(opacity_layout)
+        settings_content.add_widget(opacity_layout)
 
         banner_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(10))
         banner_layout.add_widget(Label(text='📢 横幅显示(秒):', size_hint_x=0.4, font_size=sp(14), color=CUTE_COLORS['text']))
@@ -1783,7 +1787,7 @@ class SettingsDialog(CutePopup):
         )
         self.banner_slider.bind(value=self.on_banner_time_change)
         banner_layout.add_widget(self.banner_slider)
-        layout.add_widget(banner_layout)
+        settings_content.add_widget(banner_layout)
 
         snooze_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(10))
         snooze_layout.add_widget(Label(text='😴 贪睡时间(分):', size_hint_x=0.4, font_size=sp(14), color=CUTE_COLORS['text']))
@@ -1795,7 +1799,7 @@ class SettingsDialog(CutePopup):
         )
         self.snooze_slider.bind(value=self.on_snooze_change)
         snooze_layout.add_widget(self.snooze_slider)
-        layout.add_widget(snooze_layout)
+        settings_content.add_widget(snooze_layout)
 
         max_snooze_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(10))
         max_snooze_layout.add_widget(Label(text='🔢 最大贪睡:', size_hint_x=0.4, font_size=sp(14), color=CUTE_COLORS['text']))
@@ -1807,7 +1811,7 @@ class SettingsDialog(CutePopup):
         )
         self.max_snooze_slider.bind(value=self.on_max_snooze_change)
         max_snooze_layout.add_widget(self.max_snooze_slider)
-        layout.add_widget(max_snooze_layout)
+        settings_content.add_widget(max_snooze_layout)
 
         vibrate_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(10))
         vibrate_layout.add_widget(Label(text='📳 振动提醒:', size_hint_x=0.4, font_size=sp(14), color=CUTE_COLORS['text']))
@@ -1817,7 +1821,7 @@ class SettingsDialog(CutePopup):
         )
         self.vibrate_switch.bind(active=self.on_vibrate_change)
         vibrate_layout.add_widget(self.vibrate_switch)
-        layout.add_widget(vibrate_layout)
+        settings_content.add_widget(vibrate_layout)
 
         sound_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(10))
         sound_layout.add_widget(Label(text='🔔 声音提醒:', size_hint_x=0.4, font_size=sp(14), color=CUTE_COLORS['text']))
@@ -1827,9 +1831,9 @@ class SettingsDialog(CutePopup):
         )
         self.sound_switch.bind(active=self.on_sound_change)
         sound_layout.add_widget(self.sound_switch)
-        layout.add_widget(sound_layout)
+        settings_content.add_widget(sound_layout)
 
-        # 天气城市设置(带确认按钮,修复用户不知道按Enter的体验问题)
+        # 天气城市设置（带确认按钮和校验）
         city_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(5))
         city_layout.add_widget(Label(text='🌤️ 城市:', size_hint_x=0.3, font_size=sp(14), color=CUTE_COLORS['text']))
         self.city_input = TextInput(
@@ -1844,9 +1848,9 @@ class SettingsDialog(CutePopup):
         city_confirm_btn = CuteButton(text='✅ 应用', size_hint_x=0.3, font_size=sp(13))
         city_confirm_btn.bind(on_press=self.on_city_change)
         city_layout.add_widget(city_confirm_btn)
-        layout.add_widget(city_layout)
+        settings_content.add_widget(city_layout)
 
-        # 🔥 修复:天气API Key配置(用户必须填写才能使用真实天气数据)
+        # 天气API Key配置
         api_key_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(5))
         api_key_layout.add_widget(Label(text='🔑 天气API Key:', size_hint_x=0.3, font_size=sp(14), color=CUTE_COLORS['text']))
         self.api_key_input = TextInput(
@@ -1863,7 +1867,7 @@ class SettingsDialog(CutePopup):
         api_confirm_btn = CuteButton(text='✅ 应用', size_hint_x=0.3, font_size=sp(13))
         api_confirm_btn.bind(on_press=self.on_api_key_change)
         api_key_layout.add_widget(api_confirm_btn)
-        layout.add_widget(api_key_layout)
+        settings_content.add_widget(api_key_layout)
 
         # API Key 提示说明
         hint_label = Label(
@@ -1874,7 +1878,21 @@ class SettingsDialog(CutePopup):
             halign='left'
         )
         hint_label.bind(size=hint_label.setter('text_size'))
-        layout.add_widget(hint_label)
+        settings_content.add_widget(hint_label)
+
+        # 🔥 新增:天气模式指示器(让用户清楚知道是否在使用模拟数据)
+        self.weather_mode_label = Label(
+            text=self._get_weather_mode_text(),
+            size_hint_y=0.06,
+            font_size=sp(12),
+            color=CUTE_COLORS['warning'],
+            halign='left'
+        )
+        self.weather_mode_label.bind(size=self.weather_mode_label.setter('text_size'))
+        settings_content.add_widget(self.weather_mode_label)
+
+        settings_scroll.add_widget(settings_content)
+        layout.add_widget(settings_scroll)
 
         button_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(15))
 
@@ -1916,23 +1934,44 @@ class SettingsDialog(CutePopup):
         self.app.alarm_manager.settings['sound_enabled'] = value
         self.app.alarm_manager.save_settings()
 
-    def on_city_change(self, instance):
-        """天气城市变更处理(支持按钮和Enter两种触发方式)"""
-        new_city = self.city_input.text.strip()
-        if new_city and len(new_city) >= 2:
-            self.app.weather_city = new_city
-            self.app.save_settings()  # 立即保存
-            # 同步到 Pet 对象的天气城市设置
-            if hasattr(self.app, 'pet'):
-                self.app.pet.weather_city = new_city
-            # 立即更新天气显示
-            self.app.update_weather_status(0)
-            # 提示用户保存成功
-            print(f"天气城市已更新为: {new_city}")
+    def _get_weather_mode_text(self):
+        """获取天气模式指示文本"""
+        if self.app.weather_api_key and self.app.weather_api_key != 'demo_key':
+            return '🌐 天气模式: 真实数据（已配置API Key）'
         else:
-            # 恢复原城市名
-            self.city_input.text = self.app.weather_city
-            print("城市名无效,已恢复原设置")
+            return '🔮 天气模式: 模拟数据（可前往 openweathermap.org 注册免费API Key）'
+
+    def _update_weather_mode_label(self):
+        """更新天气模式指示器"""
+        if hasattr(self, 'weather_mode_label'):
+            self.weather_mode_label.text = self._get_weather_mode_text()
+
+    def on_city_change(self, instance):
+        """天气城市变更处理（支持按钮和Enter两种触发方式，带校验）"""
+        new_city = self.city_input.text.strip()
+        # 🔥 新增:城市名校验（至少2个字符，且不能是纯数字）
+        if not new_city:
+            self.city_input.text = self.app.weather_city  # 恢复原值
+            print("城市名不能为空")
+            return
+        if len(new_city) < 2:
+            self.city_input.text = self.app.weather_city  # 恢复原值
+            print("城市名至少需要2个字符")
+            return
+        if new_city.isdigit():
+            self.city_input.text = self.app.weather_city  # 恢复原值
+            print("城市名不能是纯数字")
+            return
+
+        self.app.weather_city = new_city
+        self.app.save_settings()  # 立即保存
+        # 同步到 Pet 对象的天气城市设置
+        if hasattr(self.app, 'pet'):
+            self.app.pet.weather_city = new_city
+        # 立即更新天气显示
+        self.app.update_weather_status(0)
+        self._update_weather_mode_label()  # 🔥 新增:更新天气模式指示器
+        print(f"天气城市已更新为: {new_city}")
 
     def on_api_key_change(self, instance):
         """天气API Key变更处理"""
@@ -1943,6 +1982,7 @@ class SettingsDialog(CutePopup):
         if hasattr(self.app, 'pet') and self.app.pet:
             self.app.pet.weather_api.api_key = new_key
             self.app.pet.weather_city = self.app.weather_city
+        self._update_weather_mode_label()  # 🔥 新增:更新天气模式指示器
         print(f"天气API Key已更新: {'已设置' if new_key else '使用默认/demo'}")
 
     def reset_settings(self, instance):
@@ -1959,6 +1999,7 @@ class SettingsDialog(CutePopup):
         self.app.weather_city = 'Beijing'
         self.app.weather_api_key = 'demo_key'
         self.app.save_settings()
+        self._update_weather_mode_label()  # 🔥 新增:重置后更新天气模式指示器
 
 
 class AlarmTriggerDialog(CutePopup):
