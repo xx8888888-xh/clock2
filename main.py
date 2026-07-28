@@ -1,6 +1,9 @@
 """
-安卓桌面宠物闹钟 - 完全修复版 V3.5
+安卓桌面宠物闹钟 - 完全修复版 V3.6
 修复内存泄漏、定时器清理和状态持久化问题
+修复非重复闹钟重复触发bug（添加触发标记）
+修复睡眠动画被心情系统覆盖bug
+修复窗口大小和标签布局问题
 """
 
 import os
@@ -325,7 +328,11 @@ class CutePet(Widget):
 
         # 天气城市配置(默认北京)
         self.weather_city = 'Beijing'
-        
+
+        # 🚨 修复:睡眠动画被心情系统覆盖bug
+        # 标记宠物是否处于用户手动触发的睡眠模式（该模式下不响应心情动画切换）
+        self._manual_sleep_mode = False
+
         # bubble_timer 将在 draw_cute_pet 末尾创建，此处不提前调度
         # 修复Bug：避免 bubble_timer 双重调度
         
@@ -452,9 +459,19 @@ class CutePet(Widget):
 
         create_idle_animation()
 
-    def start_sleep_animation(self):
+    def start_sleep_animation(self, manual=False):
+        """
+        睡眠动画
+        Args:
+            manual: True=用户手动触发（锁定睡眠状态，不被心情动画覆盖）
+                   False=自动触发（可被心情动画覆盖）
+        """
         self.cancel_current_animation()
         self.is_sleeping = True
+        # 🚨 修复:睡眠动画被心情系统覆盖bug
+        # 只有用户手动触发的睡眠才标记锁定，自动睡眠不锁定
+        if manual:
+            self._manual_sleep_mode = True
         # 立即捕获当前位置作为动画基准
         base_y = self.y
 
@@ -477,6 +494,7 @@ class CutePet(Widget):
     def wake_up_animation(self):
         self.cancel_current_animation()
         self.is_sleeping = False
+        self._manual_sleep_mode = False  # 🚨 修复:退出用户手动睡眠模式
         # 立即捕获当前位置作为动画基准
         base_y = self.y
 
@@ -759,6 +777,9 @@ class AlarmClock:
         self.next_alarm = None
         self.alarm_check_event = None
         self.snooze_alarms = {}
+        # 🚨 修复:非重复闹钟重复触发bug - 添加已触发标记集合
+        # 用于记录今天已触发过的非重复闹钟ID，防止60秒轮询间隔内重复触发
+        self._triggered_today = set()
         self.settings = self.load_settings()
         self.load_alarms()
         self.schedule_next_alarm()
@@ -961,6 +982,13 @@ class AlarmClock:
         now = datetime.now()
         triggered_alarms = []
 
+        # 🚨 修复:非重复闹钟重复触发bug
+        # 每天0点重置触发记录，或者在日期变化时重置
+        today = now.date()
+        if hasattr(self, '_last_check_date') and self._last_check_date != today:
+            self._triggered_today.clear()
+        self._last_check_date = today
+
         for alarm_id, snooze_time in list(self.snooze_alarms.items()):
             if now >= snooze_time:
                 for alarm in self.alarms:
@@ -985,10 +1013,16 @@ class AlarmClock:
 
             if time_diff <= 30:
                 if not alarm['repeat_days']:
-                    triggered_alarms.append(alarm)
-                    alarm['enabled'] = False
+                    # 🚨 修复:非重复闹钟只触发一次
+                    if alarm['id'] not in self._triggered_today:
+                        triggered_alarms.append(alarm)
+                        alarm['enabled'] = False
+                        self._triggered_today.add(alarm['id'])
                 elif now.weekday() in alarm['repeat_days']:
-                    triggered_alarms.append(alarm)
+                    # 重复闹钟：每天只触发一次（防止60秒内多次触发）
+                    if alarm['id'] not in self._triggered_today:
+                        triggered_alarms.append(alarm)
+                        self._triggered_today.add(alarm['id'])
 
         if triggered_alarms:
             app = App.get_running_app()
@@ -1530,7 +1564,7 @@ class QuickMenu(CutePopup):
         if self.app.pet.is_sleeping:
             self.app.pet.wake_up_animation()
         else:
-            self.app.pet.start_sleep_animation()
+            self.app.pet.start_sleep_animation(manual=True)  # 🚨 修复:标记为用户手动睡眠
 
 
 class MainMenu(CutePopup):
@@ -2034,7 +2068,7 @@ class DesktopPetAlarmApp(App):
             Window.borderless = True
             Window.always_on_top = True
             Window.resizable = False
-            Window.size = (dp(200), dp(200))
+            Window.size = (dp(350), dp(350))  # 🚨 修复:增大窗口(原200太小,标签全被挤出)
             Window.left = 100
             Window.top = 500
 
@@ -2045,10 +2079,7 @@ class DesktopPetAlarmApp(App):
                 Window.clearcolor = (0.95, 0.95, 0.95, 0.5)
                 Window.top = 300
                 Window.left = 50
-                Window.size = (dp(200), dp(200))
-                Window.always_on_top = True
-                Window.borderless = True
-                Window.resizable = False
+                Window.size = (dp(350), dp(350))  # 🚨 修复:增大窗口以容纳所有标签
             else:
                 pass
         except Exception as e:
@@ -2276,43 +2307,42 @@ class DesktopPetAlarmApp(App):
 
     def add_mood_weather_calendar_labels(self):
         """添加心情、天气、日历显示标签到悬浮窗内"""
-        # 注意:悬浮窗大小为 200x200dp,位置需要适配
-        # 使用相对于悬浮窗的位置,而非绝对位置
-        label_width = 180
-        label_height = 20
+        # 🚨 修复:悬浮窗大小改为 350x350dp,标签布局需要适配
+        label_width = 300
+        label_height = 28
 
-        # 心情显示标签 - 悬浮窗左下角
+        # 心情显示标签 - 悬浮窗底部
         self.mood_label = Label(
             text="心情: 正常 😐",
             size_hint=(None, None),
             size=(label_width, label_height),
-            pos_hint={'x': 0.05, 'y': 0.05},
+            pos_hint={'x': 0.07, 'y': 0.01},
             color=self.pet.mood_system.get_mood_color('normal'),
-            font_size='10sp',
+            font_size='12sp',
             halign='left'
         )
         self.root.add_widget(self.mood_label)
 
-        # 天气显示标签 - 悬浮窗中下
+        # 天气显示标签 - 悬浮窗底部稍上
         self.weather_label = Label(
             text="天气: 晴天 ☀️",
             size_hint=(None, None),
             size=(label_width, label_height),
-            pos_hint={'x': 0.05, 'y': 0.15},
+            pos_hint={'x': 0.07, 'y': 0.09},
             color=CUTE_COLORS['secondary'],
-            font_size='10sp',
+            font_size='12sp',
             halign='left'
         )
         self.root.add_widget(self.weather_label)
 
-        # 日历显示标签 - 悬浮窗中上
+        # 日历显示标签 - 悬浮窗底部更上
         self.calendar_label = Label(
             text="日历: 无事件",
             size_hint=(None, None),
             size=(label_width, label_height),
-            pos_hint={'x': 0.05, 'y': 0.25},
+            pos_hint={'x': 0.07, 'y': 0.17},
             color=CUTE_COLORS['text'],
-            font_size='10sp',
+            font_size='12sp',
             halign='left'
         )
         self.root.add_widget(self.calendar_label)
@@ -2328,15 +2358,20 @@ class DesktopPetAlarmApp(App):
             new_mood = self.pet.mood_system.get_current_mood(current_time, weather_impact, next_event)
             self.pet.current_mood = new_mood
 
-            # 根据心情改变动画
-            if new_mood == 'happy':
-                self.pet.start_happy_animation()
-            elif new_mood == 'sleepy':
-                self.pet.start_sleepy_animation()
-            elif new_mood == 'excited':
-                self.pet.start_excited_animation()
-            elif new_mood == 'angry':
-                self.pet.start_angry_animation()
+            # 🚨 修复:睡眠动画被心情系统覆盖bug
+            # 只有在非手动睡眠模式下，才根据心情改变动画
+            # 手动睡眠模式由用户点击快捷菜单的"睡眠模式"按钮触发
+            # 自动睡眠（根据时间）不标记 _manual_sleep_mode，仍可被心情动画覆盖
+            if not self.pet._manual_sleep_mode:
+                # 根据心情改变动画
+                if new_mood == 'happy':
+                    self.pet.start_happy_animation()
+                elif new_mood == 'sleepy':
+                    self.pet.start_sleepy_animation()
+                elif new_mood == 'excited':
+                    self.pet.start_excited_animation()
+                elif new_mood == 'angry':
+                    self.pet.start_angry_animation()
 
             # 更新心情显示
             if self.mood_label:
