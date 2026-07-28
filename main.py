@@ -335,6 +335,9 @@ class CutePet(Widget):
         # 标记宠物是否处于用户手动触发的睡眠模式（该模式下不响应心情动画切换）
         self._manual_sleep_mode = False
 
+        # 🚨 修复:excited_animation多次点击防重复标志（初始化为False）
+        self._excited_callback_registered = False
+
         # bubble_timer 将在 draw_cute_pet 末尾创建，此处不提前调度
         # 修复Bug：避免 bubble_timer 双重调度
         
@@ -516,7 +519,8 @@ class CutePet(Widget):
         """宠物兴奋时的动画 - 快速摇摆和跳跃"""
         self.cancel_current_animation()
         self.is_excited = True
-        # 使用宠物自身位置基准(而非窗口位置)
+        # 🚨 修复:多次点击excited_animation会叠加on_complete回调导致start_cute_idle重复执行
+        self._excited_callback_registered = False
         base_y = self.y
         base_x = self.x
 
@@ -537,7 +541,9 @@ class CutePet(Widget):
 
         def on_complete(*args):
             self.is_excited = False
-            self.start_cute_idle()
+            if not self._excited_callback_registered:
+                self._excited_callback_registered = True
+                self.start_cute_idle()
 
         seq.bind(on_complete=on_complete)
         self.current_animation = seq
@@ -992,7 +998,8 @@ class AlarmClock:
         self._last_check_date = today
 
         for alarm_id, snooze_time in list(self.snooze_alarms.items()):
-            if now >= snooze_time:
+            # 🚨 修复:贪睡闹钟时间比较使用>，避免>=导致时间差1秒的问题
+            if now > snooze_time:
                 for alarm in self.alarms:
                     if alarm['id'] == alarm_id:
                         triggered_alarms.append(alarm)
@@ -1456,6 +1463,14 @@ class TimerDialog(CutePopup):
                 self.minute_input.text = '0'
                 self.sec_input.text = '0'
                 return
+
+            # 🚨 修复:TimerDialog输入框无上限校验，允许输入极大值导致计时器行为异常
+            if minutes > 999:
+                minutes = 999
+                self.minute_input.text = '999'
+            if seconds > 59:
+                seconds = 59
+                self.sec_input.text = '59'
 
             if minutes == 0 and seconds == 0:
                 return
@@ -1977,6 +1992,10 @@ class SettingsDialog(CutePopup):
     def on_api_key_change(self, instance):
         """天气API Key变更处理"""
         new_key = self.api_key_input.text.strip()
+        # 🚨 修复:天气API Key空字符串校验，空字符串应视为demo_key
+        if not new_key:
+            new_key = 'demo_key'
+            self.api_key_input.text = 'demo_key'
         self.app.weather_api_key = new_key
         self.app.save_settings()
         # 同步到 WeatherAPI 和 Pet 对象
