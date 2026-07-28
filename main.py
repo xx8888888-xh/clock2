@@ -2006,12 +2006,15 @@ class AlarmTriggerDialog(CutePopup):
     def snooze_alarm(self, instance):
         success, minutes = self.app.alarm_manager.snooze_alarm(self.alarm['id'])
         if success:
+            self.app.stop_alarm_sound()  # 停止声音
             self.dismiss()
             self.app.show_notification(f"😴 贪睡 {minutes} 分钟后再次提醒")
         else:
             instance.text = '⚠️ 已达贪睡上限!'
+            Clock.schedule_once(lambda dt: setattr(instance, 'text', f'😴 贪睡 ({alarm.get("snooze_count", 0)}/{alarm.get("max_snooze", 3)})'), 2)  # 2秒后恢复按钮文字
 
     def close_alarm(self, instance):
+        self.app.stop_alarm_sound()  # 停止声音
         self.app.alarm_manager.stop_alarm(self.alarm['id'])
         self.dismiss()
 
@@ -2275,6 +2278,14 @@ class DesktopPetAlarmApp(App):
                 self.alarm_sound.play()
         except Exception as e:
             print(f"播放声音失败: {e}")
+
+    def stop_alarm_sound(self):
+        """停止闹钟声音播放"""
+        try:
+            if self.alarm_sound:
+                self.alarm_sound.stop()
+        except Exception as e:
+            print(f"停止声音失败: {e}")
 
     def vibrate(self):
         try:
