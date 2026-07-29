@@ -996,10 +996,6 @@ class AlarmClock:
             'alarm': next_alarm
         }
 
-        if self.alarm_check_event:
-            self.alarm_check_event.cancel()
-            self.alarm_check_event = None
-
         app = App.get_running_app()
         # 修复Bug:改为每60秒轮询检查所有闹钟
         # 旧逻辑只调度到下一个闹钟时间,如果app在那之前被Android杀死,闹钟永远不会触发
@@ -1064,11 +1060,10 @@ class AlarmClock:
                         triggered_alarms.append(alarm)
                         self._triggered_today.add(alarm['id'])
 
-        if triggered_alarms:
-            app = App.get_running_app()
-            if app:
-                for alarm in triggered_alarms:
-                    app.trigger_alarm(alarm)
+        app = App.get_running_app()
+        if app:
+            for alarm in triggered_alarms:
+                app.trigger_alarm(alarm)
 
     def save_alarms(self):
         try:
