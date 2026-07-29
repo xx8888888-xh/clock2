@@ -788,6 +788,10 @@ class AlarmClock:
         # 🚨 修复:非重复闹钟重复触发bug - 添加已触发标记集合
         # 用于记录今天已触发过的非重复闹钟ID，防止60秒轮询间隔内重复触发
         self._triggered_today = set()
+        # 🚨 修复:闹钟ID使用自增计数器替代len(self.alarms)
+        # 避免删除闹钟后新添加的闹钟获得已删除闹钟的ID导致冲突
+        self._alarm_id_counter = 0
+        self._batch_mode = False  # 批量添加时暂停调度
         self.settings = self.load_settings()
         self.load_alarms()
         self.schedule_next_alarm()
@@ -813,7 +817,10 @@ class AlarmClock:
     def add_alarm(self, hour, minute, label="闹钟", content="时间到了!",
                   repeat_days=None, enabled=True):
         alarm = {
-            'id': len(self.alarms),
+            'id': self._alarm_id_counter,
+        }
+        self._alarm_id_counter += 1
+        alarm.update({
             'hour': hour,
             'minute': minute,
             'label': label,
@@ -822,13 +829,15 @@ class AlarmClock:
             'enabled': enabled,
             'snooze_count': 0,
             'max_snooze': self.settings.get('max_snooze_count', 3)
-        }
+        })
         self.alarms.append(alarm)
         self.save_alarms()
-        self.schedule_next_alarm()
+        if not self._batch_mode:
+            self.schedule_next_alarm()
         return alarm
 
     def batch_add_alarms(self, alarm_text):
+        self._batch_mode = True  # 先暂停调度
         added_count = 0
         error_count = 0
 
@@ -857,11 +866,30 @@ class AlarmClock:
                     error_count += 1
                     continue
 
-                self.add_alarm(hour, minute, label, content)
+                # 手动构建闹钟避免重复 schedule_next_alarm
+                alarm = {
+                    'id': self._alarm_id_counter,
+                }
+                self._alarm_id_counter += 1
+                alarm.update({
+                    'hour': hour,
+                    'minute': minute,
+                    'label': label,
+                    'content': content,
+                    'repeat_days': [],
+                    'enabled': True,
+                    'snooze_count': 0,
+                    'max_snooze': self.settings.get('max_snooze_count', 3)
+                })
+                self.alarms.append(alarm)
                 added_count += 1
             except Exception as e:
                 print(f"解析错误: {entry} - {e}")
                 error_count += 1
+
+        self.save_alarms()
+        self._batch_mode = False
+        self.schedule_next_alarm()  # 批量添加完成后一次性调度
 
         return added_count, error_count
 
@@ -1058,6 +1086,9 @@ class AlarmClock:
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
                     self.alarms = json.load(f)
+            # 🚨 修复:load_alarms 后更新 _alarm_id_counter，确保新闹钟ID不与已加载的冲突
+            if self.alarms:
+                self._alarm_id_counter = max(a['id'] for a in self.alarms) + 1
         except Exception as e:
             print(f"加载闹钟失败: {e}")
             self.alarms = []
@@ -1204,7 +1235,10 @@ class AlarmDialog(CutePopup):
             multiline=True,
             size_hint_x=0.75,
             font_size=sp(14),
-            background_color=CUTE_COLORS['background']
+            background_color=CUTE_COLORS['background'],
+            hint_text='闹钟内容（选填）',
+            input_filter=lambda text, _:
+                (text[:99] if len(text) > 99 else text)
         )
         content_layout.add_widget(self.content_input)
         layout.add_widget(content_layout)
