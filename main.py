@@ -1106,6 +1106,14 @@ class AlarmClock:
             self.alarm_check_event.cancel()
             self.alarm_check_event = None
 
+    def cleanup(self):
+        """清理闹钟资源，防止内存泄漏（App退出时调用）"""
+        if self.alarm_check_event:
+            self.alarm_check_event.cancel()
+            self.alarm_check_event = None
+        # 清理所有已触发标记
+        self._triggered_today.clear()
+
 
 # ==================== 计时器管理类 ====================
 class TimerManager:
