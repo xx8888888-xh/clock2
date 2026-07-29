@@ -61,13 +61,13 @@ class CalendarIntegration:
             print(f"保存日历事件失败: {e}")
 
     def cleanup_old_events(self):
-        """清理过期事件并保存到文件"""
+        """清理过期事件并保存到文件（供外部调用）"""
         now = datetime.datetime.now()
         new_events = []
         for event in list(self.events):  # 复制列表避免迭代中修改导致RuntimeError
             try:
                 event_datetime = datetime.datetime.strptime(
-                    f"{event.get('date', '')} {event.get('time', '')}", 
+                    f"{event.get('date', '')} {event.get('time', '')}",
                     "%Y-%m-%d %H:%M"
                 )
                 if event_datetime >= now:
@@ -76,8 +76,9 @@ class CalendarIntegration:
                 # 保留无法解析的事件
                 new_events.append(event)
         self.events = new_events
-        # 修复Bug：必须保存到文件，否则重启app过期事件仍会出现
+        # 保存到文件，否则重启app过期事件仍会出现
         self._save_events()
+        return len(new_events)
 
     def _create_sample_events(self):
         """创建示例日历事件 - 使用动态日期"""

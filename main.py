@@ -1314,7 +1314,9 @@ class AlarmDialog(CutePopup):
             hour = int(self.hour_spinner.text)
             minute = int(self.minute_spinner.text)
             label = self.label_input.text.strip() or '闹钟'
-            content = self.content_input.text.strip() or '时间到了!'
+            content = self.content_input.text.strip()
+            if not content:
+                content = '时间到了!'
 
             repeat_days = [i for i, check in enumerate(self.day_checks) if check.active]
 
@@ -2442,7 +2444,7 @@ class DesktopPetAlarmApp(App):
 
         # 天气显示标签 - 悬浮窗底部稍上
         self.weather_label = Label(
-            text="天气: 晴天 ☀️",
+            text="天气: 加载中... ☁️",
             size_hint=(None, None),
             size=(label_width, label_height),
             pos_hint={'x': 0.07, 'y': 0.09},
@@ -2454,7 +2456,7 @@ class DesktopPetAlarmApp(App):
 
         # 日历显示标签 - 悬浮窗底部更上
         self.calendar_label = Label(
-            text="日历: 无事件",
+            text="日历: 加载中... 📅",
             size_hint=(None, None),
             size=(label_width, label_height),
             pos_hint={'x': 0.07, 'y': 0.17},
