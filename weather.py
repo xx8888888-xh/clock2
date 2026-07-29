@@ -57,8 +57,19 @@ class WeatherAPI:
                 }
                 
                 return weather_info
+            elif response.status_code == 401:
+                # API密钥无效
+                print("天气API密钥无效，请检查设置中的API Key")
+                self.has_data = False
+                return self._get_default_weather()
+            elif response.status_code == 404:
+                # 城市不存在
+                print("天气API：未找到该城市，请检查城市名称")
+                self.has_data = False
+                return self._get_default_weather()
             else:
-                # API调用失败，返回默认值
+                # 其他API错误
+                print(f"天气API错误 (HTTP {response.status_code})，使用默认数据")
                 return self._get_default_weather()
                 
         except requests.exceptions.Timeout:

@@ -38,6 +38,8 @@ class CalendarIntegration:
             if os.path.exists(calendar_path):
                 with open(calendar_path, 'r', encoding='utf-8') as f:
                     self.events = json.load(f)
+                # 自动清理过期事件
+                self.cleanup_old_events()
             else:
                 # 如果没有日历文件,创建一些示例事件
                 self.events = self._create_sample_events()

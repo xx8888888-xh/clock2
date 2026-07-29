@@ -894,12 +894,12 @@ class AlarmClock:
         return added_count, error_count
 
     def remove_alarm(self, alarm_id):
-        # 清理关联的贪睡闹钟(修复:同时清理 snooze_alarms 字典中的 key)
+        # 清理关联的贪睡闹钟
         if alarm_id in self.snooze_alarms:
             del self.snooze_alarms[alarm_id]
         self.alarms = [a for a in self.alarms if a['id'] != alarm_id]
-        for i, alarm in enumerate(self.alarms):
-            alarm['id'] = i
+        # 重要：不重新编号！snooze_alarms 和其他地方可能引用了旧ID
+        # 闹钟ID使用自增方式，删除后ID会空缺，下次add_alarm会填补
         self.save_alarms()
         self.schedule_next_alarm()
 
@@ -1018,15 +1018,14 @@ class AlarmClock:
         now = datetime.now()
         triggered_alarms = []
 
-        # 🚨 修复:非重复闹钟重复触发bug
-        # 每天0点重置触发记录，或者在日期变化时重置
+        # 每天0点重置触发记录
         today = now.date()
         if hasattr(self, '_last_check_date') and self._last_check_date != today:
             self._triggered_today.clear()
         self._last_check_date = today
 
+        # 处理贪睡闹钟
         for alarm_id, snooze_time in list(self.snooze_alarms.items()):
-            # 🚨 修复:贪睡闹钟时间比较使用>，避免>=导致时间差1秒的问题
             if now > snooze_time:
                 for alarm in self.alarms:
                     if alarm['id'] == alarm_id:
@@ -1035,27 +1034,32 @@ class AlarmClock:
                             del self.snooze_alarms[alarm_id]
                         break
 
+        # 处理常规闹钟
         for alarm in self.alarms:
             if not alarm['enabled']:
                 continue
 
-            # 🚨 修复:闹钟时间比较逻辑bug
-            # 旧逻辑:alarm_time移到明天后,time_diff用now(今天)vs alarm_time(明天),差值≈23小时
-            # 正确做法:不移动alarm_time,直接用now和alarm_time的差值比较
-            # 这样18:00的闹钟在19:00时差值≈23小时(不触发),在17:59:45时差值≈15秒(触发)
-            alarm_time = now.replace(hour=alarm['hour'], minute=alarm['minute'], second=0, microsecond=0)
-
-            time_diff = abs((now - alarm_time).total_seconds())
-
-            if time_diff <= 30:
+            # 计算闹钟的下一次触发时间
+            alarm_time_today = now.replace(hour=alarm['hour'], minute=alarm['minute'], second=0, microsecond=0)
+            
+            # 计算距离闹钟触发还有多少秒（可以为负数）
+            seconds_until = (alarm_time_today - now).total_seconds()
+            
+            # 如果今天的闹钟时间已过（秒数为负），检查是否是重复闹钟需要推到明天
+            if seconds_until < -30:
+                # 今天的闹钟已经错过了（超过30秒窗口），不触发
+                continue
+            
+            if seconds_until <= 30:
+                # 在30秒触发窗口内
                 if not alarm['repeat_days']:
-                    # 🚨 修复:非重复闹钟只触发一次
+                    # 非重复闹钟
                     if alarm['id'] not in self._triggered_today:
                         triggered_alarms.append(alarm)
                         alarm['enabled'] = False
                         self._triggered_today.add(alarm['id'])
                 elif now.weekday() in alarm['repeat_days']:
-                    # 重复闹钟：每天只触发一次（防止60秒内多次触发）
+                    # 重复闹钟：每天只触发一次
                     if alarm['id'] not in self._triggered_today:
                         triggered_alarms.append(alarm)
                         self._triggered_today.add(alarm['id'])
@@ -1065,11 +1069,6 @@ class AlarmClock:
             if app:
                 for alarm in triggered_alarms:
                     app.trigger_alarm(alarm)
-
-        # 注意:不再调用 schedule_next_alarm()
-        # 因为定时器使用的是稳定的 60 秒轮询,不依赖 schedule_next_alarm
-        # 如果在 check_alarms 内部再次调用 schedule_next_alarm,会导致定时器叠加
-        # schedule_next_alarm 应该只在闹钟列表发生变更(增/删/改)时由外部调用
 
     def save_alarms(self):
         try:
@@ -1100,11 +1099,6 @@ class AlarmClock:
         except Exception as e:
             print(f"导出闹钟失败: {e}")
             return False
-
-    def cleanup(self):
-        if self.alarm_check_event:
-            self.alarm_check_event.cancel()
-            self.alarm_check_event = None
 
     def cleanup(self):
         """清理闹钟资源，防止内存泄漏（App退出时调用）"""
