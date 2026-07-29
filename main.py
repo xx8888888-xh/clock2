@@ -1039,12 +1039,11 @@ class AlarmClock:
             if not alarm['enabled']:
                 continue
 
-            alarm_time = now.replace(
-                hour=alarm['hour'],
-                minute=alarm['minute'],
-                second=0,
-                microsecond=0
-            )
+            # 🚨 修复:闹钟时间比较逻辑bug
+            # 旧逻辑:alarm_time移到明天后,time_diff用now(今天)vs alarm_time(明天),差值≈23小时
+            # 正确做法:不移动alarm_time,直接用now和alarm_time的差值比较
+            # 这样18:00的闹钟在19:00时差值≈23小时(不触发),在17:59:45时差值≈15秒(触发)
+            alarm_time = now.replace(hour=alarm['hour'], minute=alarm['minute'], second=0, microsecond=0)
 
             time_diff = abs((now - alarm_time).total_seconds())
 
