@@ -788,6 +788,7 @@ class AlarmClock:
         # 🚨 修复:非重复闹钟重复触发bug - 添加已触发标记集合
         # 用于记录今天已触发过的非重复闹钟ID，防止60秒轮询间隔内重复触发
         self._triggered_today = set()
+        self._last_check_date = datetime.now().date()  # 🚨 Fix: 初始化时设置当前日期，避免跨会话状态残留
         # 🚨 修复:闹钟ID使用自增计数器替代len(self.alarms)
         # 避免删除闹钟后新添加的闹钟获得已删除闹钟的ID导致冲突
         self._alarm_id_counter = 0
@@ -1109,18 +1110,20 @@ class TimerManager:
     def __init__(self):
         self.timers = []
         self.timer_check_event = None
+        self._timer_id_counter = 0  # 🚨 Fix: 使用自增ID避免与已删除计时器ID冲突
         self.start_checking()
 
     def add_timer(self, minutes, seconds=0, label="计时器"):
         total_seconds = minutes * 60 + seconds
         timer = {
-            'id': len(self.timers),
+            'id': self._timer_id_counter,  # 🚨 Fix: 使用自增ID
             'label': label,
             'total_seconds': total_seconds,
             'remaining': total_seconds,
             'running': True,
             'created_at': datetime.now()
         }
+        self._timer_id_counter += 1  # 🚨 Fix: 自增计数器
         self.timers.append(timer)
         return timer
 
