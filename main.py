@@ -623,12 +623,16 @@ class CutePet(Widget):
 
         self.last_click_time = current_time
 
+        # 始终重置计数，防止延迟回调和后续点击混淆
+        # 用户连续操作后，计数归零，等待下一轮判断
         if self.click_count == 1:
             # 修复: 捕获 click_count 值避免闭包问题
             saved_count = self.click_count
             Clock.schedule_once(lambda dt, cc=saved_count: self._delayed_click(cc), 0.2)
+            self.click_count = 0  # 立即归零，后续点击重新计数
         elif self.click_count == 2:
             self.on_double_click()
+            self.click_count = 0
         elif self.click_count >= 3:
             self.on_triple_click()
             self.click_count = 0
@@ -636,17 +640,13 @@ class CutePet(Widget):
     def _delayed_click(self, saved_count):
         """延迟点击处理(使用捕获的值)"""
         if saved_count == 1:
-            self._on_pet_click()
+            self.on_pet_click()
 
-    def _on_pet_click(self):
-        """内部点击处理方法"""
+    def on_pet_click(self):
+        """宠物单击处理：弹出主菜单"""
         app = App.get_running_app()
         if app:
             app.show_main_menu()
-
-    def on_pet_click(self):
-        """保留兼容性的外部方法(已废弃,请使用 _on_pet_click)"""
-        self._on_pet_click()
 
     def on_double_click(self):
         self.excited_animation()
