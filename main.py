@@ -978,6 +978,9 @@ class AlarmClock:
         next_alarm_time = None
         next_alarm = None
 
+        # 🚨 修复:triggered_alarms NameError
+        # triggered_alarms 用于追踪本次检查中已触发的贪睡闹钟,避免重复触发
+        triggered_alarms = []
         for alarm_id, snooze_time in list(self.snooze_alarms.items()):
             # 检查贪睡时间是否已到
             if snooze_time <= now:
@@ -1659,10 +1662,20 @@ class QuickMenu(CutePopup):
 
     def toggle_sleep(self, instance):
         self.dismiss()
-        if self.app.pet.is_sleeping:
+        was_sleeping = self.app.pet.is_sleeping
+        if was_sleeping:
             self.app.pet.wake_up_animation()
         else:
             self.app.pet.start_sleep_animation(manual=True)  # 🚨 修复:标记为用户手动睡眠
+        # 🚨 修复:关闭旧菜单后重建，确保下次打开时标题反映最新睡眠状态
+        # QuickMenu 的标题在 __init__ 中确定，toggle 后需重建才能更新标题
+        try:
+            self.app.root.remove_widget(self._quick_menu)
+        except Exception:
+            pass
+        self._quick_menu = QuickMenu(self.app)
+        self._quick_menu.open()
+
 
 
 class MainMenu(CutePopup):
@@ -2379,8 +2392,14 @@ class DesktopPetAlarmApp(App):
         menu.open()
 
     def show_quick_menu(self):
-        menu = QuickMenu(self)
-        menu.open()
+        # 🚨 修复:关闭已打开的菜单,避免多次长按打开多个菜单
+        if hasattr(self, '_quick_menu') and self._quick_menu:
+            try:
+                self._quick_menu.dismiss()
+            except Exception:
+                pass
+        self._quick_menu = QuickMenu(self)
+        self._quick_menu.open()
 
     def show_timer_dialog(self):
         dialog = TimerDialog(self.timer_manager)
