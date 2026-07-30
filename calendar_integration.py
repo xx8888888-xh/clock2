@@ -75,9 +75,9 @@ class CalendarIntegration:
                 if event_datetime >= now:
                     new_events.append(event)
             except (KeyError, ValueError):
-                # 保留无法解析的事件，但记录警告
-                print(f"⚠️ 日历事件解析失败: '{event.get('title', '未知')}' - 将在下次清理时移除")
-                new_events.append(event)
+                # 🔒 安全：不再打印 event.get('title')，避免泄露用户隐私
+                # 解析失败的事件直接丢弃，不保留不显示
+                pass
         self.events = new_events
         # 保存到文件，否则重启app过期事件仍会出现
         self._save_events()
@@ -149,9 +149,8 @@ class CalendarIntegration:
                     if next_datetime is None or event_datetime < next_datetime:
                         next_datetime = event_datetime
                         next_event = event
-            except (KeyError, ValueError) as e:
-                # 记录错误但不中断，让用户能看到哪些事件有问题
-                print(f"⚠️ 日历事件解析失败: '{event.get('title', '未知')}' - 日期格式错误")
+            except (KeyError, ValueError):
+                # 🔒 安全：不再打印事件标题，避免泄露用户隐私
                 continue
 
         return next_event

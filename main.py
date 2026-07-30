@@ -1925,7 +1925,7 @@ class SettingsDialog(CutePopup):
             size_hint_x=0.4,
             font_size=sp(14),
             background_color=CUTE_COLORS['background'],
-            password=False,
+            password=True,  # 🔒 掩码显示，防止截图泄露 API Key
             hint_text='OpenWeatherMap API Key'
         )
         self.api_key_input.bind(on_text_validate=self.on_api_key_change)
@@ -1934,6 +1934,17 @@ class SettingsDialog(CutePopup):
         api_confirm_btn.bind(on_press=self.on_api_key_change)
         api_key_layout.add_widget(api_confirm_btn)
         settings_content.add_widget(api_key_layout)
+
+        # 🔒 API Key 掩码提示标签
+        self.api_key_masked_label = Label(
+            text='',
+            size_hint_y=0.05,
+            font_size=sp(11),
+            color=CUTE_COLORS['secondary'],
+            halign='left'
+        )
+        self.api_key_masked_label.bind(size=self.api_key_masked_label.setter('text_size'))
+        settings_content.add_widget(self.api_key_masked_label)
 
         # API Key 提示说明
         hint_label = Label(
@@ -1957,8 +1968,14 @@ class SettingsDialog(CutePopup):
         self.weather_mode_label.bind(size=self.weather_mode_label.setter('text_size'))
         settings_content.add_widget(self.weather_mode_label)
 
+        # 🔒 初始化 API Key 掩码提示（需要在 _update_api_key_masked_label 定义之后调用）
+        # 但 SettingsDialog 使用 ScrollView，内容在 __init__ 末尾才渲染，所以下面单独在末尾调用
+        # 这里先确保 api_key_masked_label 已创建，然后在 ScrollView 添加后再调用更新
         settings_scroll.add_widget(settings_content)
         layout.add_widget(settings_scroll)
+
+        # 🔒 初始化 API Key 掩码提示
+        self._update_api_key_masked_label()
 
         button_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(15))
 
@@ -2007,6 +2024,15 @@ class SettingsDialog(CutePopup):
         else:
             return '🔮 天气模式: 模拟数据（可前往 openweathermap.org 注册免费API Key）'
 
+    def _update_api_key_masked_label(self):
+        """更新 API Key 掩码提示标签"""
+        if hasattr(self, 'api_key_masked_label') and self.app:
+            if self.app.weather_api_key and self.app.weather_api_key != 'demo_key':
+                masked = self.app.weather_api_key[:4] + '****' + self.app.weather_api_key[-4:]
+                self.api_key_masked_label.text = f'🔐 当前 Key: {masked}'
+            else:
+                self.api_key_masked_label.text = '🔐 当前: 未配置（使用模拟数据）'
+
     def _update_weather_mode_label(self):
         """更新天气模式指示器"""
         if hasattr(self, 'weather_mode_label'):
@@ -2048,7 +2074,8 @@ class SettingsDialog(CutePopup):
         if hasattr(self.app, 'pet') and self.app.pet:
             self.app.pet.weather_api.api_key = new_key
             self.app.pet.weather_city = self.app.weather_city
-        self._update_weather_mode_label()  # 🔥 新增:更新天气模式指示器
+        self._update_weather_mode_label()  # 🔥 更新天气模式指示器
+        self._update_api_key_masked_label()  # 🔒 更新掩码提示
         print(f"天气API Key已更新: {'已设置' if new_key else '使用默认/demo'}")
 
     def reset_settings(self, instance):
@@ -2059,13 +2086,14 @@ class SettingsDialog(CutePopup):
         self.max_snooze_slider.value = 3
         self.vibrate_switch.active = True
         self.sound_switch.active = True
-        # 修复:重置天气城市和API Key
+        # 重置天气城市和API Key
         self.city_input.text = 'Beijing'
         self.api_key_input.text = 'demo_key'
         self.app.weather_city = 'Beijing'
         self.app.weather_api_key = 'demo_key'
         self.app.save_settings()
-        self._update_weather_mode_label()  # 🔥 新增:重置后更新天气模式指示器
+        self._update_weather_mode_label()  # 重置后更新天气模式指示器
+        self._update_api_key_masked_label()  # 🔒 重置后更新掩码提示
 
 
 class AlarmTriggerDialog(CutePopup):
