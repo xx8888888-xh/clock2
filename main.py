@@ -337,6 +337,8 @@ class CutePet(Widget):
 
         # 🚨 修复:excited_animation多次点击防重复标志（初始化为False）
         self._excited_callback_registered = False
+        self._sleep_callback_registered = False  # 🚨 修复:start_sleep_animation防重复标志
+        self._happy_callback_registered = False  # 🚨 修复:start_happy_animation防重复标志
 
         # bubble_timer 将在 draw_cute_pet 末尾创建，此处不提前调度
         # 修复Bug：避免 bubble_timer 双重调度
@@ -473,6 +475,7 @@ class CutePet(Widget):
         """
         self.cancel_current_animation()
         self.is_sleeping = True
+        self._sleep_callback_registered = False  # 🚨 修复:重置回调标志，防止多次调用叠加
         # 🚨 修复:睡眠动画被心情系统覆盖bug
         # 只有用户手动触发的睡眠才标记锁定，自动睡眠不锁定
         if manual:
@@ -483,7 +486,8 @@ class CutePet(Widget):
         anim = Animation(scale=0.85, opacity=0.6, rotation=0, duration=1, t='out_quad')
 
         def start_breathing(*args):
-            if self.is_sleeping:
+            if self.is_sleeping and not self._sleep_callback_registered:
+                self._sleep_callback_registered = True
                 current_y = self.y  # 重新获取当前位置
                 breathe_in = Animation(opacity=0.5, scale=0.83, duration=2, t='in_out_sine')
                 breathe_out = Animation(opacity=0.7, scale=0.87, duration=2, t='in_out_sine')
@@ -690,6 +694,7 @@ class CutePet(Widget):
 
     def start_happy_animation(self):
         self.cancel_current_animation()
+        self._happy_callback_registered = False  # 🚨 修复:重置回调标志，防止多次调用叠加
         # 使用宠物自身位置基准
         base_y = self.y
 
@@ -701,6 +706,14 @@ class CutePet(Widget):
 
         anim = (sway_left & jump_up) + (sway_right & jump_down)
         anim.repeat = True
+
+        def on_repeat(*args):
+            if self._happy_callback_registered:
+                return
+            self._happy_callback_registered = True
+            self.start_cute_idle()
+
+        anim.bind(on_complete=on_repeat)
         self.current_animation = anim
         anim.start(self)
 
@@ -1237,8 +1250,7 @@ class AlarmDialog(CutePopup):
             font_size=sp(14),
             background_color=CUTE_COLORS['background'],
             hint_text='闹钟内容（选填）',
-            input_filter=lambda text, _:
-                (text[:99] if len(text) > 99 else text)
+            input_filter=lambda text, _: text[:99]
         )
         content_layout.add_widget(self.content_input)
         layout.add_widget(content_layout)
