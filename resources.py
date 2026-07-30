@@ -28,7 +28,7 @@ ALARM_SOUND_PATHS = [
 # 应用配置
 APP_CONFIG = {
     'app_name': '宠物闹钟',
-    'version': '3.6.1',
+    'version': '3.6.2',
     'author': 'Pet Alarm Team',
     'description': '一个可爱的桌面宠物闹钟应用',
     'website': 'https://github.com/petalarm',

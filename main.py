@@ -1,10 +1,10 @@
 """
-安卓桌面宠物闹钟 - 完全修复版 V3.6.1
+安卓桌面宠物闹钟 - 完全修复版 V3.6.2
 修复内存泄漏、定时器清理和状态持久化问题
 修复非重复闹钟重复触发bug（添加触发标记）
 修复睡眠动画被心情系统覆盖bug
 修复窗口大小和标签布局问题
-V3.6.1: 修复SettingsDialog无ScrollView、城市名无校验、模拟天气无UI提示、日历文档误导
+V3.6.2: 修复多个动画回调叠加bug、简化input_filter、版本号统一、on_start定时器初始化、内容输入长度限制
 """
 
 import os
@@ -438,6 +438,10 @@ class CutePet(Widget):
         if self.current_animation:
             self.current_animation.cancel(self)
             self.current_animation = None
+        # 🚨 修复:取消动画时重置所有回调标志，确保下次动画能正常触发回调
+        self._happy_callback_registered = False
+        self._sleep_callback_registered = False
+        self._excited_callback_registered = False
 
     def start_cute_idle(self):
         self.cancel_current_animation()
@@ -693,8 +697,8 @@ class CutePet(Widget):
             self.calendar_update_event = None
 
     def start_happy_animation(self):
+        self._happy_callback_registered = False  # 🚨 修复:重置回调标志在cancel之前，避免cancel后旧标志残留导致回调跳过
         self.cancel_current_animation()
-        self._happy_callback_registered = False  # 🚨 修复:重置回调标志，防止多次调用叠加
         # 使用宠物自身位置基准
         base_y = self.y
 
@@ -2703,7 +2707,7 @@ class DesktopPetAlarmApp(App):
         gc.collect()
 
     def on_start(self):
-        """Android应用启动 - 恢复窗口位置和宠物状态"""
+        """Android应用启动 - 恢复窗口位置、宠物状态和定时器"""
         try:
             from kivy.utils import platform
             if platform == "android":
@@ -2718,6 +2722,29 @@ class DesktopPetAlarmApp(App):
                 if self.root is None:
                     from kivy.clock import Clock
                     Clock.schedule_once(lambda dt: self.init_app_window(), 0.5)
+
+                # 🚨 修复:on_start 也要初始化定时器（与 on_resume 对称）
+                # init_app_window 通过 Clock.schedule_once 调用，有短暂窗口期没有定时器
+                try:
+                    if self.sleep_check_event:
+                        self.sleep_check_event.cancel()
+                    self.sleep_check_event = Clock.schedule_interval(self.check_pet_sleep_state, 60)
+
+                    if self.pet:
+                        for attr, method, interval in [
+                            ('mood_update_event', self.update_mood_status, 30),
+                            ('weather_update_event', self.update_weather_status, 600),
+                            ('calendar_update_event', self.update_calendar_status, 600),
+                        ]:
+                            evt = getattr(self.pet, attr, None)
+                            if evt:
+                                evt.cancel()
+                            setattr(self.pet, attr, Clock.schedule_interval(method, interval))
+
+                    if self.alarm_manager:
+                        self.alarm_manager.schedule_next_alarm()
+                except AttributeError:
+                    pass  # init_app_window 尚未运行，定时器尚未创建，等待 Clock.schedule_once
         except Exception:
             pass
 
