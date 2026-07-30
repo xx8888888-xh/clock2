@@ -223,34 +223,6 @@ class CalendarIntegration:
 
         return emoji_map.get(event_type, '📝')
 
-    def check_overdue_events(self):
-        """检查并清理过期事件"""
-        now = datetime.datetime.now()
-        overdue_events = []
-        
-        new_events = []
-        for event in self.events:
-            try:
-                event_datetime = datetime.datetime.strptime(
-                    f"{event.get('date', '')} {event.get('time', '')}", 
-                    "%Y-%m-%d %H:%M"
-                )
-                if event_datetime < now:
-                    overdue_events.append(event)
-                else:
-                    new_events.append(event)
-            except (KeyError, ValueError):
-                # 保留无法解析的事件，但记录警告
-                print(f"⚠️ 日历事件解析失败: '{event.get('title', '未知')}' - 格式错误将过期")
-                new_events.append(event)
-        
-        # 更新事件列表并保存
-        if overdue_events:
-            self.events = new_events
-            self._save_events()
-        
-        return overdue_events
-    
     def get_upcoming_events(self, days=7):
         """获取未来N天的事件"""
         now = datetime.datetime.now()

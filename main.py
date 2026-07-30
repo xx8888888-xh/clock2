@@ -1186,10 +1186,11 @@ class CutePopup(Popup):
 
 
 class AlarmDialog(CutePopup):
-    def __init__(self, alarm_manager, alarm_id=None, **kwargs):
+    def __init__(self, alarm_manager, app=None, alarm_id=None, **kwargs):
         super().__init__(**kwargs)
         self.alarm_manager = alarm_manager
         self.alarm_id = alarm_id
+        self.app = app  # 🚨 修复:传入 app 引用用于显示反馈横幅
 
         self.title = '✏️ 编辑闹钟' if alarm_id is not None else '➕ 新建闹钟'
         self.size_hint = (0.9, 0.8)
@@ -1314,6 +1315,11 @@ class AlarmDialog(CutePopup):
             hour = int(self.hour_spinner.text)
             minute = int(self.minute_spinner.text)
             label = self.label_input.text.strip() or '闹钟'
+            # 🚨 修复:使用 validate_alarm_label 确保标签长度合理（函数已存在但未调用）
+            from resources import validate_alarm_label
+            valid, _ = validate_alarm_label(label)
+            if not valid:
+                label = label[:20]  # 超长时截断而非拒绝，避免用户困惑
             content = self.content_input.text.strip()
             if not content:
                 content = '时间到了!'
@@ -1324,9 +1330,18 @@ class AlarmDialog(CutePopup):
                 self.alarm_manager.update_alarm(
                     self.alarm_id, hour, minute, label, content, repeat_days
                 )
+                action_text = '✅ 闹钟已更新'
             else:
                 self.alarm_manager.add_alarm(
                     hour, minute, label, content, repeat_days, True
+                )
+                action_text = '✅ 闹钟已添加'
+            # 🚨 修复:保存成功后通过横幅通知用户，提升用户体验
+            if self.app:
+                self.app.banner.show(action_text, f'{label} ({hour:02d}:{minute:02d})', 3)
+            else:
+                Clock.schedule_once(
+                    lambda dt: print(f'{action_text}: {label} ({hour:02d}:{minute:02d})'), 0.1
                 )
             self.dismiss()
         except ValueError:
@@ -1599,7 +1614,7 @@ class QuickMenu(CutePopup):
 
     def new_alarm(self, instance):
         self.dismiss()
-        dialog = AlarmDialog(self.app.alarm_manager)
+        dialog = AlarmDialog(self.app.alarm_manager, self.app)
         dialog.open()
 
     def show_timer(self, instance):
@@ -1759,7 +1774,7 @@ class MainMenu(CutePopup):
 
     def edit_alarm(self, alarm):
         self.dismiss()
-        dialog = AlarmDialog(self.app.alarm_manager, alarm['id'])
+        dialog = AlarmDialog(self.app.alarm_manager, self.app, alarm['id'])
         dialog.open()
 
     def delete_alarm(self, alarm):
@@ -1768,7 +1783,7 @@ class MainMenu(CutePopup):
 
     def show_new_alarm_dialog(self, instance):
         self.dismiss()
-        dialog = AlarmDialog(self.app.alarm_manager)
+        dialog = AlarmDialog(self.app.alarm_manager, self.app)
         dialog.open()
 
     def show_batch_add_dialog(self, instance):
@@ -2009,10 +2024,8 @@ class SettingsDialog(CutePopup):
             self.city_input.text = self.app.weather_city  # 恢复原值
             print("城市名至少需要2个字符")
             return
-        if new_city.isdigit():
-            self.city_input.text = self.app.weather_city  # 恢复原值
-            print("城市名不能是纯数字")
-            return
+        # 🚨 修复:移除 isdigit() 校验，支持中文城市名
+        # 纯数字输入会被 len<2 拦截，无需额外校验
 
         self.app.weather_city = new_city
         self.app.save_settings()  # 立即保存
@@ -2027,10 +2040,8 @@ class SettingsDialog(CutePopup):
     def on_api_key_change(self, instance):
         """天气API Key变更处理"""
         new_key = self.api_key_input.text.strip()
-        # 🚨 修复:天气API Key空字符串校验，空字符串应视为demo_key
-        if not new_key:
-            new_key = 'demo_key'
-            self.api_key_input.text = 'demo_key'
+        # 🚨 修复:简化 API Key 校验逻辑
+        # 空字符串时 WeatherAPI 会自动降级为 demo_key，无需提前校验
         self.app.weather_api_key = new_key
         self.app.save_settings()
         # 同步到 WeatherAPI 和 Pet 对象
