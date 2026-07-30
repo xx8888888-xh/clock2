@@ -167,35 +167,37 @@ class PetMoodSystem:
     
     def load_state(self):
         """从文件加载宠物状态"""
+        config_path = None
         try:
-            from kivy.app import App
             app = App.get_running_app()
             if app:
                 config_path = os.path.join(app.user_data_dir, 'pet_state.json')
-            else:
-                config_path = 'pet_state.json'
-            
+        except Exception:
+            pass
+        if not config_path:
+            config_path = 'pet_state.json'
+
+        try:
             if os.path.exists(config_path):
                 with open(config_path, 'r', encoding='utf-8') as f:
                     state = json.load(f)
-                
+
                 self.current_mood = state.get('current_mood', 'normal')
                 self.last_interaction_time = datetime.datetime.fromisoformat(
                     state.get('last_interaction_time', datetime.datetime.now().isoformat())
                 )
                 self.interaction_count = state.get('interaction_count', 0)
-                # 修复：同时更新 Pet 对象的 current_mood 以保持一致
+                # 同步到 Pet 对象（避免 late-binding 陷阱，捕获时立即求值）
                 try:
-                    from kivy.app import App
                     app = App.get_running_app()
                     if app and hasattr(app, 'pet'):
                         app.pet.current_mood = self.current_mood
                 except Exception:
                     pass
-            return self.current_mood  # 返回实际的 mood 字符串
+            return self.current_mood
         except Exception as e:
             print(f"加载宠物状态失败: {e}")
-        return self.current_mood  # 文件不存在或加载失败时返回默认值
+        return self.current_mood
     
     def reset_state(self):
         """重置宠物状态到默认"""

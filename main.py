@@ -248,8 +248,8 @@ class SleepBubble(Widget):
         if self.current_anim:
             self.current_anim.cancel(self)
 
-        self.opacity = 0
-        start_y = self.y
+        start_y = self.y  # 先捕获起始位置（此时 opacity 仍为 1.0）
+        self.opacity = 0  # 再设置为透明，避免闪烁
 
         anim = Animation(opacity=0.8, duration=0.5)
         anim &= Animation(y=start_y + dp(60), duration=2, t='out_quad')
@@ -979,13 +979,28 @@ class AlarmClock:
         next_alarm = None
 
         for alarm_id, snooze_time in list(self.snooze_alarms.items()):
-            if snooze_time > now:
-                if next_alarm_time is None or snooze_time < next_alarm_time:
-                    next_alarm_time = snooze_time
-                    for alarm in self.alarms:
-                        if alarm['id'] == alarm_id:
-                            next_alarm = alarm
-                            break
+            # 检查贪睡时间是否已到
+            if snooze_time <= now:
+                # 找到对应的闹钟配置
+                for alarm in self.alarms:
+                    if alarm['id'] == alarm_id:
+                        # 检查该闹钟在今天是重复闹钟，如果是则需验证星期
+                        if alarm['repeat_days'] and now.weekday() not in alarm['repeat_days']:
+                            break  # 今天不是重复日，跳过（保留 snooze_alarms 供明天用）
+                        # 触发闹钟
+                        if alarm['id'] not in self._triggered_today:
+                            triggered_alarms.append(alarm)
+                            self._triggered_today.add(alarm['id'])
+                        # 清除该贪睡闹钟
+                        del self.snooze_alarms[alarm_id]
+                        break
+                continue
+            if next_alarm_time is None or snooze_time < next_alarm_time:
+                next_alarm_time = snooze_time
+                for alarm in self.alarms:
+                    if alarm['id'] == alarm_id:
+                        next_alarm = alarm
+                        break
 
         for alarm in self.alarms:
             if not alarm['enabled']:
@@ -1835,7 +1850,7 @@ class SettingsDialog(CutePopup):
         settings_content = BoxLayout(orientation='vertical', padding=dp(20), spacing=dp(12), size_hint_y=None)
         settings_content.bind(minimum_height=settings_content.setter('height'))
 
-        size_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(10))
+        size_layout = BoxLayout(orientation='horizontal', size_hint_y=0.08, spacing=dp(10))
         size_layout.add_widget(Label(text='🐾 宠物大小:', size_hint_x=0.4, font_size=sp(14), color=CUTE_COLORS['text']))
         self.size_slider = Slider(
             min=80,
@@ -1847,7 +1862,7 @@ class SettingsDialog(CutePopup):
         size_layout.add_widget(self.size_slider)
         settings_content.add_widget(size_layout)
 
-        opacity_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(10))
+        opacity_layout = BoxLayout(orientation='horizontal', size_hint_y=0.08, spacing=dp(10))
         opacity_layout.add_widget(Label(text='👻 透明度:', size_hint_x=0.4, font_size=sp(14), color=CUTE_COLORS['text']))
         self.opacity_slider = Slider(
             min=0.3,
@@ -1859,7 +1874,7 @@ class SettingsDialog(CutePopup):
         opacity_layout.add_widget(self.opacity_slider)
         settings_content.add_widget(opacity_layout)
 
-        banner_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(10))
+        banner_layout = BoxLayout(orientation='horizontal', size_hint_y=0.08, spacing=dp(10))
         banner_layout.add_widget(Label(text='📢 横幅显示(秒):', size_hint_x=0.4, font_size=sp(14), color=CUTE_COLORS['text']))
         self.banner_slider = Slider(
             min=3,
@@ -1871,7 +1886,7 @@ class SettingsDialog(CutePopup):
         banner_layout.add_widget(self.banner_slider)
         settings_content.add_widget(banner_layout)
 
-        snooze_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(10))
+        snooze_layout = BoxLayout(orientation='horizontal', size_hint_y=0.08, spacing=dp(10))
         snooze_layout.add_widget(Label(text='😴 贪睡时间(分):', size_hint_x=0.4, font_size=sp(14), color=CUTE_COLORS['text']))
         self.snooze_slider = Slider(
             min=1,
@@ -1883,7 +1898,7 @@ class SettingsDialog(CutePopup):
         snooze_layout.add_widget(self.snooze_slider)
         settings_content.add_widget(snooze_layout)
 
-        max_snooze_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(10))
+        max_snooze_layout = BoxLayout(orientation='horizontal', size_hint_y=0.08, spacing=dp(10))
         max_snooze_layout.add_widget(Label(text='🔢 最大贪睡:', size_hint_x=0.4, font_size=sp(14), color=CUTE_COLORS['text']))
         self.max_snooze_slider = Slider(
             min=1,
@@ -1895,7 +1910,7 @@ class SettingsDialog(CutePopup):
         max_snooze_layout.add_widget(self.max_snooze_slider)
         settings_content.add_widget(max_snooze_layout)
 
-        vibrate_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(10))
+        vibrate_layout = BoxLayout(orientation='horizontal', size_hint_y=0.08, spacing=dp(10))
         vibrate_layout.add_widget(Label(text='📳 振动提醒:', size_hint_x=0.4, font_size=sp(14), color=CUTE_COLORS['text']))
         self.vibrate_switch = Switch(
             active=self.app.alarm_manager.settings.get('vibrate', True),
@@ -1905,7 +1920,7 @@ class SettingsDialog(CutePopup):
         vibrate_layout.add_widget(self.vibrate_switch)
         settings_content.add_widget(vibrate_layout)
 
-        sound_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(10))
+        sound_layout = BoxLayout(orientation='horizontal', size_hint_y=0.08, spacing=dp(10))
         sound_layout.add_widget(Label(text='🔔 声音提醒:', size_hint_x=0.4, font_size=sp(14), color=CUTE_COLORS['text']))
         self.sound_switch = Switch(
             active=self.app.alarm_manager.settings.get('sound_enabled', True),
@@ -1916,7 +1931,7 @@ class SettingsDialog(CutePopup):
         settings_content.add_widget(sound_layout)
 
         # 天气城市设置（带确认按钮和校验）
-        city_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(5))
+        city_layout = BoxLayout(orientation='horizontal', size_hint_y=0.10, spacing=dp(5))
         city_layout.add_widget(Label(text='🌤️ 城市:', size_hint_x=0.3, font_size=sp(14), color=CUTE_COLORS['text']))
         self.city_input = TextInput(
             text=self.app.weather_city,
@@ -1933,7 +1948,7 @@ class SettingsDialog(CutePopup):
         settings_content.add_widget(city_layout)
 
         # 天气API Key配置
-        api_key_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(5))
+        api_key_layout = BoxLayout(orientation='horizontal', size_hint_y=0.10, spacing=dp(5))
         api_key_layout.add_widget(Label(text='🔑 天气API Key:', size_hint_x=0.3, font_size=sp(14), color=CUTE_COLORS['text']))
         self.api_key_input = TextInput(
             text=self.app.weather_api_key,
@@ -1954,7 +1969,7 @@ class SettingsDialog(CutePopup):
         # 🔒 API Key 掩码提示标签
         self.api_key_masked_label = Label(
             text='',
-            size_hint_y=0.05,
+            size_hint_y=0.035,
             font_size=sp(11),
             color=CUTE_COLORS['secondary'],
             halign='left'
@@ -1965,7 +1980,7 @@ class SettingsDialog(CutePopup):
         # API Key 提示说明
         hint_label = Label(
             text='💡 免费API Key: openweathermap.org 免费注册获取',
-            size_hint_y=0.06,
+            size_hint_y=0.035,
             font_size=sp(12),
             color=CUTE_COLORS['secondary'],
             halign='left'
@@ -1976,7 +1991,7 @@ class SettingsDialog(CutePopup):
         # 🔥 新增:天气模式指示器(让用户清楚知道是否在使用模拟数据)
         self.weather_mode_label = Label(
             text=self._get_weather_mode_text(),
-            size_hint_y=0.06,
+            size_hint_y=0.035,
             font_size=sp(12),
             color=CUTE_COLORS['warning'],
             halign='left'
@@ -1993,7 +2008,7 @@ class SettingsDialog(CutePopup):
         # 🔒 初始化 API Key 掩码提示
         self._update_api_key_masked_label()
 
-        button_layout = BoxLayout(orientation='horizontal', size_hint_y=0.12, spacing=dp(15))
+        button_layout = BoxLayout(orientation='horizontal', size_hint_y=0.08, spacing=dp(15))
 
         reset_btn = CuteButton(text='🔄 重置')
         reset_btn.bind(on_press=self.reset_settings)
@@ -2167,7 +2182,7 @@ class AlarmTriggerDialog(CutePopup):
             Clock.schedule_once(
                 lambda dt, a=alarm_data:
                     setattr(instance, 'text',
-                            f"😴 贪睡 ({a.get('snooze_count', 0)}/{a.get('max_snooze', 3)})"), 2)
+                            f'😴 贪睡 ({a.get("snooze_count", 0)}/{a.get("max_snooze", 3)})'), 2)
 
     def close_alarm(self, instance):
         self.app.stop_alarm_sound()  # 停止声音
