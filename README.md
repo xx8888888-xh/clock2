@@ -104,6 +104,7 @@ weather_api = WeatherAPI(api_key='your_openweathermap_key')
 
 ## 版本历史
 
+- **V3.6.2**: 添加闹钟保存成功反馈横幅、支持中文城市名、简化API Key校验逻辑、集成validate_alarm_label验证、日历模块去重
 - **V3.6.1**: 修复SettingsDialog无ScrollView导致小屏溢出、城市名无校验（空/过短/纯数字拒绝）、模拟天气无UI提示、日历功能文档误导用户
 - **V3.6**: 宠物状态持久化、应用内城市设置、on_resume回调修复
 - V3.3: 修复on_resume天气定时器、window_pos路径、添加on_exit
